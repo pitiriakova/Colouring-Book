@@ -4,7 +4,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.annotation.DrawableRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -17,13 +16,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Brush
@@ -36,24 +35,42 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.example.colouringbook.data.Category
+import com.example.colouringbook.data.ColouringImage
+import com.example.colouringbook.data.categoryImages
+import com.example.colouringbook.data.homeCategories
+import com.example.colouringbook.data.pastelPalette
 import com.example.colouringbook.ui.theme.ColouringBookTheme
+import com.example.colouringbook.utils.floodFillWithinOutline
+import com.example.colouringbook.utils.loadMutableBitmap
+import com.example.colouringbook.utils.mapTapToBitmap
+import com.example.colouringbook.utils.toArgbInt
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -68,47 +85,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
-
-data class Category(
-    val id: String,
-    val title: String,
-    @param:DrawableRes val imageRes: Int
-)
-
-data class ColouringImage(
-    val id: String,
-    val name: String,
-    @param:DrawableRes val imageRes: Int
-)
-
-private val homeCategories = listOf(
-    Category("cats", "Cats", R.drawable.cat_coloring),
-    Category("dinos", "Dinos", R.drawable.cat_coloring),
-    Category("dolls", "Dolls", R.drawable.cat_coloring),
-    Category("balls", "Balls", R.drawable.cat_coloring)
-)
-
-private val pastelPalette = listOf(
-    Color(0xFFF8C8C8),
-    Color(0xFFF7D9AE),
-    Color(0xFFF9EDAF),
-    Color(0xFFD8EDC7),
-    Color(0xFFC9E8D7),
-    Color(0xFFC8E5F6),
-    Color(0xFFD7D5F8),
-    Color(0xFFE9D4F5),
-    Color(0xFFF6D3E0),
-    Color(0xFFE4D8CF)
-)
-
-private fun categoryImages(category: Category): List<ColouringImage> =
-    List(8) { index ->
-        ColouringImage(
-            id = "${category.id}-${index + 1}",
-            name = "${category.title} ${index + 1}",
-            imageRes = category.imageRes
-        )
-    }
 
 @Composable
 fun ColouringBookApp(modifier: Modifier = Modifier) {
@@ -358,7 +334,18 @@ fun FullScreenImageScreen(
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     var selectedColor by remember { mutableStateOf(pastelPalette.first()) }
+    var isFilling by remember(image.id) { mutableStateOf(false) }
+    val colouringBitmap = remember(image.id, image.imageRes) {
+        loadMutableBitmap(context, image.imageRes)
+    }
+    var bitmapVersion by remember(image.id) { mutableStateOf(0) }
+    var imageContainerSize by remember { mutableStateOf(IntSize.Zero) }
+    val imageBitmap = remember(bitmapVersion, colouringBitmap) {
+        colouringBitmap.asImageBitmap()
+    }
 
     Column(
         modifier = modifier
@@ -405,11 +392,41 @@ fun FullScreenImageScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(Color(0xFFF8F1E4))
-                    .padding(20.dp),
+                    .padding(20.dp)
+                    .onSizeChanged { imageContainerSize = it }
+                    .pointerInput(selectedColor, colouringBitmap, imageContainerSize, isFilling) {
+                        detectTapGestures { tapOffset ->
+                            if (isFilling) return@detectTapGestures
+
+                            val bitmapOffset = mapTapToBitmap(
+                                tapOffset = tapOffset,
+                                containerSize = imageContainerSize,
+                                bitmapWidth = colouringBitmap.width,
+                                bitmapHeight = colouringBitmap.height
+                            ) ?: return@detectTapGestures
+
+                            isFilling = true
+                            coroutineScope.launch {
+                                val wasFilled = withContext(Dispatchers.Default) {
+                                    floodFillWithinOutline(
+                                        bitmap = colouringBitmap,
+                                        startX = bitmapOffset.x,
+                                        startY = bitmapOffset.y,
+                                        replacementColor = selectedColor.toArgbInt()
+                                    )
+                                }
+
+                                if (wasFilled) {
+                                    bitmapVersion++
+                                }
+                                isFilling = false
+                            }
+                        }
+                    },
                 contentAlignment = Alignment.Center
             ) {
                 Image(
-                    painter = painterResource(id = image.imageRes),
+                    bitmap = imageBitmap,
                     contentDescription = image.name,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Fit

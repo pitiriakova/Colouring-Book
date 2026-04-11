@@ -1,0 +1,4 @@
+<resources>
+
+    <style name="Theme.ColouringBook" parent="Theme.MaterialComponents.Light" />
+</resources>

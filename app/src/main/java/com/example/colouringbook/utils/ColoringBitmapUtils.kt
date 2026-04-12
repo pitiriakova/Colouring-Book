@@ -12,6 +12,8 @@ import androidx.compose.ui.unit.IntSize
 import com.example.colouringbook.data.ImageSource
 import java.util.ArrayDeque
 import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.sqrt
 
 fun loadMutableBitmap(
     context: Context,
@@ -24,6 +26,17 @@ fun loadMutableBitmap(
     } ?: error("ImageSource must provide either drawableRes or assetPath")
 
     return bitmap.copy(Bitmap.Config.ARGB_8888, true)
+}
+
+fun loadImmutableBitmap(
+    context: Context,
+    imageSource: ImageSource
+): Bitmap {
+    return when {
+        imageSource.drawableRes != null -> BitmapFactory.decodeResource(context.resources, imageSource.drawableRes)
+        imageSource.assetPath != null -> context.assets.open(imageSource.assetPath).use(BitmapFactory::decodeStream)
+        else -> null
+    } ?: error("ImageSource must provide either drawableRes or assetPath")
 }
 
 fun mapTapToBitmap(
@@ -127,6 +140,82 @@ fun floodFillWithinOutline(
     return changed
 }
 
+fun buildFillRegionMask(
+    bitmap: Bitmap,
+    startX: Int,
+    startY: Int
+): BooleanArray? {
+    val width = bitmap.width
+    val height = bitmap.height
+    val pixels = IntArray(width * height)
+    bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+
+    val startIndex = startY * width + startX
+    if (!isFillableArea(pixels[startIndex])) {
+        return null
+    }
+
+    val mask = BooleanArray(width * height)
+    val queue = ArrayDeque<Point>()
+    queue.add(Point(startX, startY))
+
+    while (queue.isNotEmpty()) {
+        val point = queue.removeFirst()
+        val y = point.y
+        if (y !in 0 until height) continue
+
+        var left = point.x
+        while (left >= 0 && isMaskCandidate(pixels[y * width + left], mask[y * width + left])) {
+            left--
+        }
+        left++
+
+        var right = point.x
+        while (right < width && isMaskCandidate(pixels[y * width + right], mask[y * width + right])) {
+            right++
+        }
+        right--
+
+        if (left > right) continue
+
+        for (x in left..right) {
+            mask[y * width + x] = true
+        }
+
+        enqueueMaskRuns(pixels, mask, width, height, y - 1, left, right, queue)
+        enqueueMaskRuns(pixels, mask, width, height, y + 1, left, right, queue)
+    }
+
+    return mask
+}
+
+fun applyBrushStrokeWithinMask(
+    bitmap: Bitmap,
+    regionMask: BooleanArray,
+    startX: Int,
+    startY: Int,
+    endX: Int,
+    endY: Int,
+    @ColorInt replacementColor: Int,
+    brushRadiusPx: Int
+): Boolean {
+    var changed = false
+    val deltaX = (endX - startX).toFloat()
+    val deltaY = (endY - startY).toFloat()
+    val steps = maxOf(1, ceil(sqrt(deltaX * deltaX + deltaY * deltaY).toDouble()).toInt())
+
+    for (step in 0..steps) {
+        val fraction = step / steps.toFloat()
+        val x = (startX + deltaX * fraction).toInt()
+        val y = (startY + deltaY * fraction).toInt()
+        if (paintBrushDot(bitmap, regionMask, x, y, replacementColor, brushRadiusPx)) {
+            changed = true
+        }
+    }
+
+    return changed
+}
+
 private fun enqueueAdjacentRuns(
     pixels: IntArray,
     width: Int,
@@ -154,11 +243,81 @@ private fun enqueueAdjacentRuns(
     }
 }
 
+private fun enqueueMaskRuns(
+    pixels: IntArray,
+    mask: BooleanArray,
+    width: Int,
+    height: Int,
+    y: Int,
+    left: Int,
+    right: Int,
+    queue: ArrayDeque<Point>
+) {
+    if (y !in 0 until height) return
+
+    var x = left
+    while (x <= right) {
+        while (x <= right && !isMaskCandidate(pixels[y * width + x], mask[y * width + x])) {
+            x++
+        }
+        if (x > right) break
+
+        queue.add(Point(x, y))
+
+        while (x <= right && isMaskCandidate(pixels[y * width + x], mask[y * width + x])) {
+            x++
+        }
+    }
+}
+
+private fun paintBrushDot(
+    bitmap: Bitmap,
+    regionMask: BooleanArray,
+    centerX: Int,
+    centerY: Int,
+    @ColorInt replacementColor: Int,
+    brushRadiusPx: Int
+): Boolean {
+    val width = bitmap.width
+    val height = bitmap.height
+    val radiusSquared = brushRadiusPx * brushRadiusPx
+    var changed = false
+
+    for (y in (centerY - brushRadiusPx)..(centerY + brushRadiusPx)) {
+        if (y !in 0 until height) continue
+        for (x in (centerX - brushRadiusPx)..(centerX + brushRadiusPx)) {
+            if (x !in 0 until width) continue
+
+            val dx = x - centerX
+            val dy = y - centerY
+            if (dx * dx + dy * dy > radiusSquared) continue
+
+            val index = y * width + x
+            if (!regionMask[index]) continue
+
+            val currentColor = bitmap.getPixel(x, y)
+            if (colorsAreClose(currentColor, replacementColor)) continue
+
+            bitmap.setPixel(x, y, replacementColor)
+            changed = true
+        }
+    }
+
+    return changed
+}
+
 private fun isFillCandidate(
     @ColorInt color: Int,
     @ColorInt replacementColor: Int
 ): Boolean {
     return isFillableArea(color) && !colorsAreClose(color, replacementColor)
+}
+
+private fun isMaskCandidate(
+    @ColorInt color: Int,
+    alreadyInMask: Boolean
+): Boolean {
+    return !alreadyInMask && isFillableArea(color)
 }
 
 private fun isFillableArea(@ColorInt color: Int): Boolean {

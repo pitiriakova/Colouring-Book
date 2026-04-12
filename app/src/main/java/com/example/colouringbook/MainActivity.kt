@@ -22,10 +22,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Brush
+import androidx.compose.material.icons.filled.FormatColorFill
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
@@ -65,14 +67,22 @@ import com.example.colouringbook.data.categoryImages
 import com.example.colouringbook.data.homeCategories
 import com.example.colouringbook.data.pastelPalette
 import com.example.colouringbook.ui.theme.ColouringBookTheme
-import com.example.colouringbook.utils.floodFillWithinOutline
+import com.example.colouringbook.utils.applyBrushStrokeWithinMask
+import com.example.colouringbook.utils.buildFillRegionMask
+import com.example.colouringbook.utils.loadImmutableBitmap
 import com.example.colouringbook.utils.loadMutableBitmap
 import com.example.colouringbook.utils.mapTapToBitmap
 import com.example.colouringbook.utils.toArgbInt
 import coil.compose.AsyncImage
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import android.graphics.Point
+
+private const val BRUSH_THICKNESS_PX = 15
+private const val BRUSH_RADIUS_PX = BRUSH_THICKNESS_PX / 2
+
+private enum class ColoringTool {
+    Brush,
+    Fill
+}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -340,9 +350,14 @@ fun FullScreenImageScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
     var selectedColor by remember { mutableStateOf(pastelPalette.first()) }
-    var isFilling by remember(image.id) { mutableStateOf(false) }
+    var selectedTool by remember(image.id) { mutableStateOf(ColoringTool.Brush) }
+    var isDrawing by remember(image.id) { mutableStateOf(false) }
+    var activeRegionMask by remember(image.id) { mutableStateOf<BooleanArray?>(null) }
+    var previousDrawPoint by remember(image.id) { mutableStateOf<Point?>(null) }
+    val outlineBitmap = remember(image.id, image.imageSource) {
+        loadImmutableBitmap(context, image.imageSource)
+    }
     val colouringBitmap = remember(image.id, image.imageSource) {
         loadMutableBitmap(context, image.imageSource)
     }
@@ -399,32 +414,99 @@ fun FullScreenImageScreen(
                     .background(Color.White)
                     .padding(20.dp)
                     .onSizeChanged { imageContainerSize = it }
-                    .pointerInput(selectedColor, colouringBitmap, imageContainerSize, isFilling) {
-                        detectTapGestures { tapOffset ->
-                            if (isFilling) return@detectTapGestures
+                    .pointerInput(selectedTool, selectedColor, colouringBitmap, outlineBitmap, imageContainerSize) {
+                        if (selectedTool == ColoringTool.Fill) {
+                            detectTapGestures { tapOffset ->
+                                val bitmapOffset = mapTapToBitmap(
+                                    tapOffset = tapOffset,
+                                    containerSize = imageContainerSize,
+                                    bitmapWidth = colouringBitmap.width,
+                                    bitmapHeight = colouringBitmap.height
+                                ) ?: return@detectTapGestures
 
-                            val bitmapOffset = mapTapToBitmap(
-                                tapOffset = tapOffset,
-                                containerSize = imageContainerSize,
-                                bitmapWidth = colouringBitmap.width,
-                                bitmapHeight = colouringBitmap.height
-                            ) ?: return@detectTapGestures
-
-                            isFilling = true
-                            coroutineScope.launch {
-                                val wasFilled = withContext(Dispatchers.Default) {
-                                    floodFillWithinOutline(
+                                if (
+                                    com.example.colouringbook.utils.floodFillWithinOutline(
                                         bitmap = colouringBitmap,
                                         startX = bitmapOffset.x,
                                         startY = bitmapOffset.y,
                                         replacementColor = selectedColor.toArgbInt()
                                     )
-                                }
-
-                                if (wasFilled) {
+                                ) {
                                     bitmapVersion++
                                 }
-                                isFilling = false
+                            }
+                        } else {
+                            detectDragGestures(
+                                onDragStart = { dragStart ->
+                                    val startPoint = mapTapToBitmap(
+                                        tapOffset = dragStart,
+                                        containerSize = imageContainerSize,
+                                        bitmapWidth = colouringBitmap.width,
+                                        bitmapHeight = colouringBitmap.height
+                                    ) ?: return@detectDragGestures
+
+                                    val regionMask = buildFillRegionMask(
+                                        bitmap = outlineBitmap,
+                                        startX = startPoint.x,
+                                        startY = startPoint.y
+                                    ) ?: return@detectDragGestures
+
+                                    activeRegionMask = regionMask
+                                    previousDrawPoint = startPoint
+                                    isDrawing = true
+
+                                    if (
+                                        applyBrushStrokeWithinMask(
+                                            bitmap = colouringBitmap,
+                                            regionMask = regionMask,
+                                            startX = startPoint.x,
+                                            startY = startPoint.y,
+                                            endX = startPoint.x,
+                                            endY = startPoint.y,
+                                            replacementColor = selectedColor.toArgbInt(),
+                                            brushRadiusPx = BRUSH_RADIUS_PX
+                                        )
+                                    ) {
+                                        bitmapVersion++
+                                    }
+                                },
+                                onDragCancel = {
+                                    activeRegionMask = null
+                                    previousDrawPoint = null
+                                    isDrawing = false
+                                },
+                                onDragEnd = {
+                                    activeRegionMask = null
+                                    previousDrawPoint = null
+                                    isDrawing = false
+                                }
+                            ) { change, _ ->
+                                val regionMask = activeRegionMask ?: return@detectDragGestures
+                                val lastPoint = previousDrawPoint ?: return@detectDragGestures
+                                val mappedPoint = mapTapToBitmap(
+                                    tapOffset = change.position,
+                                    containerSize = imageContainerSize,
+                                    bitmapWidth = colouringBitmap.width,
+                                    bitmapHeight = colouringBitmap.height
+                                ) ?: return@detectDragGestures
+
+                                if (
+                                    applyBrushStrokeWithinMask(
+                                        bitmap = colouringBitmap,
+                                        regionMask = regionMask,
+                                        startX = lastPoint.x,
+                                        startY = lastPoint.y,
+                                        endX = mappedPoint.x,
+                                        endY = mappedPoint.y,
+                                        replacementColor = selectedColor.toArgbInt(),
+                                        brushRadiusPx = BRUSH_RADIUS_PX
+                                    )
+                                ) {
+                                    bitmapVersion++
+                                }
+
+                                previousDrawPoint = mappedPoint
+                                change.consume()
                             }
                         }
                     },
@@ -436,8 +518,10 @@ fun FullScreenImageScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Fit
                 )
-                BrushIndicator(
+                ToolIndicator(
                     selectedColor = selectedColor,
+                    selectedTool = selectedTool,
+                    onToolSelected = { selectedTool = it },
                     modifier = Modifier.align(Alignment.BottomStart)
                 )
             }
@@ -522,8 +606,10 @@ fun ColorSwatch(
 }
 
 @Composable
-fun BrushIndicator(
+private fun ToolIndicator(
     selectedColor: Color,
+    selectedTool: ColoringTool,
+    onToolSelected: (ColoringTool) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -544,12 +630,45 @@ fun BrushIndicator(
                     .border(1.dp, Color.White, androidx.compose.foundation.shape.CircleShape)
             )
             Spacer(modifier = Modifier.width(10.dp))
-            Icon(
-                imageVector = Icons.Filled.Brush,
-                contentDescription = "Brush color",
+            ToolIcon(
+                icon = Icons.Filled.Brush,
+                contentDescription = "Brush tool",
+                selected = selectedTool == ColoringTool.Brush,
                 tint = selectedColor,
-                modifier = Modifier.size(24.dp)
+                onClick = { onToolSelected(ColoringTool.Brush) }
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            ToolIcon(
+                icon = Icons.Filled.FormatColorFill,
+                contentDescription = "Fill tool",
+                selected = selectedTool == ColoringTool.Fill,
+                tint = selectedColor,
+                onClick = { onToolSelected(ColoringTool.Fill) }
             )
         }
+    }
+}
+
+@Composable
+private fun ToolIcon(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    selected: Boolean,
+    tint: Color,
+    onClick: () -> Unit
+) {
+    Surface(
+        color = if (selected) Color(0xFFF3E7D7) else Color.Transparent,
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+        modifier = Modifier.clickable(onClick = onClick)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = tint,
+            modifier = Modifier
+                .padding(horizontal = 8.dp, vertical = 6.dp)
+                .size(24.dp)
+        )
     }
 }

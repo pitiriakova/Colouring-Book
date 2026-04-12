@@ -49,7 +49,15 @@ val pastelPalette = listOf(
     Color(0xFFD7D5F8),
     Color(0xFFE9D4F5),
     Color(0xFFF6D3E0),
-    Color(0xFFE4D8CF)
+    Color(0xFFE4D8CF),
+    Color(0xFFFF8A80),
+    Color(0xFFFFB74D),
+    Color(0xFFFFF176),
+    Color(0xFFA5D6A7),
+    Color(0xFF4DD0E1),
+    Color(0xFF64B5F6),
+    Color(0xFF9575CD),
+    Color(0xFFF06292)
 )
 
 fun categoryImages(context: Context, category: Category): List<ColouringImage> {

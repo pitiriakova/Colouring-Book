@@ -9,16 +9,20 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -37,7 +41,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Offset
@@ -78,6 +81,10 @@ import android.graphics.Point
 
 private const val BRUSH_THICKNESS_PX = 15
 private const val BRUSH_RADIUS_PX = BRUSH_THICKNESS_PX / 2
+private val PaletteSwatchSpacing = 12.dp
+private val ToolIconSize = 36.dp
+private val ToolIconPaddingHorizontal = 12.dp
+private val ToolIconPaddingVertical = 10.dp
 
 private enum class ColoringTool {
     Brush,
@@ -161,35 +168,38 @@ fun HomeScreen(
     onCategoryClick: (Category) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .background(Color(0xFFFFF8EC))
             .padding(horizontal = 20.dp, vertical = 24.dp)
     ) {
-        Text(
-            text = "Colouring Book",
-            fontSize = 30.sp
-        )
-        Spacer(modifier = Modifier.size(8.dp))
-        Text(
-            text = "Pick a category to start colouring",
-            color = Color(0xFF5F5A52)
-        )
-        Spacer(modifier = Modifier.size(20.dp))
+        val gridSpacing = 12.dp
+        val availableGridHeight = maxHeight.coerceAtLeast(240.dp)
+        val tileHeight = ((availableGridHeight - gridSpacing) / 2).coerceAtLeast(140.dp)
+
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
-            modifier = Modifier.fillMaxSize(),
-            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp),
-            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(bottom = 16.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(availableGridHeight),
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
+            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(bottom = 8.dp),
+            userScrollEnabled = false
         ) {
             items(categories) { category ->
                 CategoryTileCard(
                     category = category,
-                    onClick = { onCategoryClick(category) }
+                    onClick = { onCategoryClick(category) },
+                    modifier = Modifier.height(tileHeight)
                 )
             }
+        }
         }
     }
 }
@@ -227,7 +237,7 @@ fun CategoryTileCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .aspectRatio(1f)
+                    .weight(1f)
                     .clip(androidx.compose.foundation.shape.RoundedCornerShape(18.dp))
                     .background(Color.White),
                 contentAlignment = Alignment.Center
@@ -239,7 +249,7 @@ fun CategoryTileCard(
                     contentScale = ContentScale.Fit
                 )
             }
-            Spacer(modifier = Modifier.size(12.dp))
+            Spacer(modifier = Modifier.size(8.dp))
             Text(
                 text = category.title,
                 fontSize = 18.sp
@@ -394,136 +404,138 @@ fun FullScreenImageScreen(
             }
         }
         Spacer(modifier = Modifier.size(16.dp))
-        ColorPaletteRow(
-            colors = pastelPalette,
-            selectedColor = selectedColor,
-            onColorSelected = { selectedColor = it }
-        )
-        Spacer(modifier = Modifier.size(20.dp))
-        Surface(
+        Row(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(bottom = 12.dp),
-            shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
-            color = Color.White,
-            shadowElevation = 8.dp
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp)
         ) {
-            Box(
+            PaletteSidebar(
+                colors = pastelPalette,
+                selectedColor = selectedColor,
+                onColorSelected = { selectedColor = it },
+                selectedTool = selectedTool,
+                onToolSelected = { selectedTool = it },
+                modifier = Modifier.width(140.dp)
+            )
+            Surface(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.White)
-                    .padding(20.dp)
-                    .onSizeChanged { imageContainerSize = it }
-                    .pointerInput(selectedTool, selectedColor, colouringBitmap, outlineBitmap, imageContainerSize) {
-                        if (selectedTool == ColoringTool.Fill) {
-                            detectTapGestures { tapOffset ->
-                                val bitmapOffset = mapTapToBitmap(
-                                    tapOffset = tapOffset,
-                                    containerSize = imageContainerSize,
-                                    bitmapWidth = colouringBitmap.width,
-                                    bitmapHeight = colouringBitmap.height
-                                ) ?: return@detectTapGestures
+                    .weight(1f),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
+                color = Color.White,
+                shadowElevation = 8.dp
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.White)
+                        .padding(20.dp)
+                        .onSizeChanged { imageContainerSize = it }
+                        .pointerInput(selectedTool, selectedColor, colouringBitmap, outlineBitmap, imageContainerSize) {
+                            if (selectedTool == ColoringTool.Fill) {
+                                detectTapGestures { tapOffset ->
+                                    val bitmapOffset = mapTapToBitmap(
+                                        tapOffset = tapOffset,
+                                        containerSize = imageContainerSize,
+                                        bitmapWidth = colouringBitmap.width,
+                                        bitmapHeight = colouringBitmap.height
+                                    ) ?: return@detectTapGestures
 
-                                if (
-                                    com.example.colouringbook.utils.floodFillWithinOutline(
-                                        bitmap = colouringBitmap,
-                                        startX = bitmapOffset.x,
-                                        startY = bitmapOffset.y,
-                                        replacementColor = selectedColor.toArgbInt()
-                                    )
-                                ) {
-                                    bitmapVersion++
+                                    if (
+                                        com.example.colouringbook.utils.floodFillWithinOutline(
+                                            bitmap = colouringBitmap,
+                                            startX = bitmapOffset.x,
+                                            startY = bitmapOffset.y,
+                                            replacementColor = selectedColor.toArgbInt()
+                                        )
+                                    ) {
+                                        bitmapVersion++
+                                    }
                                 }
-                            }
-                        } else {
-                            detectDragGestures(
-                                onDragStart = { dragStart ->
-                                    val startPoint = mapTapToBitmap(
-                                        tapOffset = dragStart,
+                            } else {
+                                detectDragGestures(
+                                    onDragStart = { dragStart ->
+                                        val startPoint = mapTapToBitmap(
+                                            tapOffset = dragStart,
+                                            containerSize = imageContainerSize,
+                                            bitmapWidth = colouringBitmap.width,
+                                            bitmapHeight = colouringBitmap.height
+                                        ) ?: return@detectDragGestures
+
+                                        val regionMask = buildFillRegionMask(
+                                            bitmap = outlineBitmap,
+                                            startX = startPoint.x,
+                                            startY = startPoint.y
+                                        ) ?: return@detectDragGestures
+
+                                        activeRegionMask = regionMask
+                                        previousDrawPoint = startPoint
+                                        isDrawing = true
+
+                                        if (
+                                            applyBrushStrokeWithinMask(
+                                                bitmap = colouringBitmap,
+                                                regionMask = regionMask,
+                                                startX = startPoint.x,
+                                                startY = startPoint.y,
+                                                endX = startPoint.x,
+                                                endY = startPoint.y,
+                                                replacementColor = selectedColor.toArgbInt(),
+                                                brushRadiusPx = BRUSH_RADIUS_PX
+                                            )
+                                        ) {
+                                            bitmapVersion++
+                                        }
+                                    },
+                                    onDragCancel = {
+                                        activeRegionMask = null
+                                        previousDrawPoint = null
+                                        isDrawing = false
+                                    },
+                                    onDragEnd = {
+                                        activeRegionMask = null
+                                        previousDrawPoint = null
+                                        isDrawing = false
+                                    }
+                                ) { change, _ ->
+                                    val regionMask = activeRegionMask ?: return@detectDragGestures
+                                    val lastPoint = previousDrawPoint ?: return@detectDragGestures
+                                    val mappedPoint = mapTapToBitmap(
+                                        tapOffset = change.position,
                                         containerSize = imageContainerSize,
                                         bitmapWidth = colouringBitmap.width,
                                         bitmapHeight = colouringBitmap.height
                                     ) ?: return@detectDragGestures
 
-                                    val regionMask = buildFillRegionMask(
-                                        bitmap = outlineBitmap,
-                                        startX = startPoint.x,
-                                        startY = startPoint.y
-                                    ) ?: return@detectDragGestures
-
-                                    activeRegionMask = regionMask
-                                    previousDrawPoint = startPoint
-                                    isDrawing = true
-
                                     if (
                                         applyBrushStrokeWithinMask(
                                             bitmap = colouringBitmap,
                                             regionMask = regionMask,
-                                            startX = startPoint.x,
-                                            startY = startPoint.y,
-                                            endX = startPoint.x,
-                                            endY = startPoint.y,
+                                            startX = lastPoint.x,
+                                            startY = lastPoint.y,
+                                            endX = mappedPoint.x,
+                                            endY = mappedPoint.y,
                                             replacementColor = selectedColor.toArgbInt(),
                                             brushRadiusPx = BRUSH_RADIUS_PX
                                         )
                                     ) {
                                         bitmapVersion++
                                     }
-                                },
-                                onDragCancel = {
-                                    activeRegionMask = null
-                                    previousDrawPoint = null
-                                    isDrawing = false
-                                },
-                                onDragEnd = {
-                                    activeRegionMask = null
-                                    previousDrawPoint = null
-                                    isDrawing = false
-                                }
-                            ) { change, _ ->
-                                val regionMask = activeRegionMask ?: return@detectDragGestures
-                                val lastPoint = previousDrawPoint ?: return@detectDragGestures
-                                val mappedPoint = mapTapToBitmap(
-                                    tapOffset = change.position,
-                                    containerSize = imageContainerSize,
-                                    bitmapWidth = colouringBitmap.width,
-                                    bitmapHeight = colouringBitmap.height
-                                ) ?: return@detectDragGestures
 
-                                if (
-                                    applyBrushStrokeWithinMask(
-                                        bitmap = colouringBitmap,
-                                        regionMask = regionMask,
-                                        startX = lastPoint.x,
-                                        startY = lastPoint.y,
-                                        endX = mappedPoint.x,
-                                        endY = mappedPoint.y,
-                                        replacementColor = selectedColor.toArgbInt(),
-                                        brushRadiusPx = BRUSH_RADIUS_PX
-                                    )
-                                ) {
-                                    bitmapVersion++
+                                    previousDrawPoint = mappedPoint
+                                    change.consume()
                                 }
-
-                                previousDrawPoint = mappedPoint
-                                change.consume()
                             }
-                        }
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                Image(
-                    bitmap = imageBitmap,
-                    contentDescription = image.name,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Fit
-                )
-                ToolIndicator(
-                    selectedColor = selectedColor,
-                    selectedTool = selectedTool,
-                    onToolSelected = { selectedTool = it },
-                    modifier = Modifier.align(Alignment.BottomStart)
-                )
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        bitmap = imageBitmap,
+                        contentDescription = image.name,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Fit
+                    )
+                }
             }
         }
     }
@@ -557,23 +569,83 @@ fun AppImage(
 fun ColorPaletteRow(
     colors: List<Color>,
     selectedColor: Color,
+    swatchSize: androidx.compose.ui.unit.Dp,
     onColorSelected: (Color) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2),
+        modifier = modifier
+            .fillMaxWidth()
+            .wrapContentHeight(),
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(PaletteSwatchSpacing),
+        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(PaletteSwatchSpacing),
+        userScrollEnabled = false
     ) {
-        colors.forEachIndexed { index, color ->
+        items(colors) { color ->
             ColorSwatch(
                 color = color,
                 isSelected = color == selectedColor,
+                baseSize = swatchSize,
                 onClick = { onColorSelected(color) }
             )
-            if (index != colors.lastIndex) {
-                Spacer(modifier = Modifier.width(8.dp))
-            }
         }
+    }
+}
+
+@Composable
+private fun PaletteSidebar(
+    colors: List<Color>,
+    selectedColor: Color,
+    onColorSelected: (Color) -> Unit,
+    selectedTool: ColoringTool,
+    onToolSelected: (ColoringTool) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    BoxWithConstraints(
+        modifier = modifier.fillMaxHeight()
+    ) {
+        val rowCount = ((colors.size + 1) / 2).coerceAtLeast(1)
+        val reservedHeight = 150.dp
+        val availablePaletteHeight = (maxHeight - reservedHeight).coerceAtLeast(140.dp)
+        val swatchSize = ((availablePaletteHeight - (PaletteSwatchSpacing * (rowCount - 1))) / rowCount)
+            .coerceIn(26.dp, 42.dp)
+
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+        color = Color.White.copy(alpha = 0.96f),
+        shadowElevation = 6.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(androidx.compose.foundation.shape.CircleShape)
+                    .background(selectedColor)
+                    .border(2.dp, Color.White, androidx.compose.foundation.shape.CircleShape)
+            )
+            Spacer(modifier = Modifier.size(12.dp))
+            ColorPaletteRow(
+                colors = colors,
+                selectedColor = selectedColor,
+                swatchSize = swatchSize,
+                onColorSelected = onColorSelected,
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(modifier = Modifier.size(12.dp))
+            ToolIndicator(
+                selectedColor = selectedColor,
+                selectedTool = selectedTool,
+                onToolSelected = onToolSelected
+            )
+        }
+    }
     }
 }
 
@@ -581,23 +653,25 @@ fun ColorPaletteRow(
 fun ColorSwatch(
     color: Color,
     isSelected: Boolean,
+    baseSize: androidx.compose.ui.unit.Dp,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val circleShape = androidx.compose.foundation.shape.CircleShape
+    val size = if (isSelected) baseSize else (baseSize - 6.dp).coerceAtLeast(20.dp)
 
     Box(
         modifier = modifier
-            .size(28.dp)
+            .size(size)
             .shadow(
-                elevation = if (isSelected) 6.dp else 0.dp,
+                elevation = if (isSelected) 10.dp else 0.dp,
                 shape = circleShape,
                 clip = false
             )
             .clip(circleShape)
             .background(color)
             .border(
-                width = if (isSelected) 3.dp else 1.dp,
+                width = if (isSelected) 4.dp else 2.dp,
                 color = if (isSelected) Color.White else Color(0xFFDCCFC3),
                 shape = circleShape
             )
@@ -612,40 +686,25 @@ private fun ToolIndicator(
     onToolSelected: (ColoringTool) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Surface(
-        modifier = modifier,
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
-        color = Color.White.copy(alpha = 0.96f),
-        shadowElevation = 6.dp
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(18.dp)
-                    .clip(androidx.compose.foundation.shape.CircleShape)
-                    .background(selectedColor)
-                    .border(1.dp, Color.White, androidx.compose.foundation.shape.CircleShape)
-            )
-            Spacer(modifier = Modifier.width(10.dp))
-            ToolIcon(
-                icon = Icons.Filled.Brush,
-                contentDescription = "Brush tool",
-                selected = selectedTool == ColoringTool.Brush,
-                tint = selectedColor,
-                onClick = { onToolSelected(ColoringTool.Brush) }
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            ToolIcon(
-                icon = Icons.Filled.FormatColorFill,
-                contentDescription = "Fill tool",
-                selected = selectedTool == ColoringTool.Fill,
-                tint = selectedColor,
-                onClick = { onToolSelected(ColoringTool.Fill) }
-            )
-        }
+        ToolIcon(
+            icon = Icons.Filled.Brush,
+            contentDescription = "Brush tool",
+            selected = selectedTool == ColoringTool.Brush,
+            tint = selectedColor,
+            onClick = { onToolSelected(ColoringTool.Brush) }
+        )
+        ToolIcon(
+            icon = Icons.Filled.FormatColorFill,
+            contentDescription = "Fill tool",
+            selected = selectedTool == ColoringTool.Fill,
+            tint = selectedColor,
+            onClick = { onToolSelected(ColoringTool.Fill) }
+        )
     }
 }
 
@@ -667,8 +726,11 @@ private fun ToolIcon(
             contentDescription = contentDescription,
             tint = tint,
             modifier = Modifier
-                .padding(horizontal = 8.dp, vertical = 6.dp)
-                .size(24.dp)
+                .padding(
+                    horizontal = ToolIconPaddingHorizontal,
+                    vertical = ToolIconPaddingVertical
+                )
+                .size(ToolIconSize)
         )
     }
 }

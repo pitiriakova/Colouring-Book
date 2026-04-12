@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -32,6 +33,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.FormatColorFill
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
@@ -39,16 +41,25 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -85,6 +96,20 @@ private val PaletteSwatchSpacing = 12.dp
 private val ToolIconSize = 36.dp
 private val ToolIconPaddingHorizontal = 12.dp
 private val ToolIconPaddingVertical = 10.dp
+private val RevealBrushRadius = 36.dp
+private const val RevealGridColumns = 12
+private const val RevealGridRows = 18
+private const val RevealCompletionRatio = 0.35f
+
+private data class MagicStar(
+    val alignment: Alignment,
+    val startPadding: Int,
+    val topPadding: Int,
+    val size: Int,
+    val durationMillis: Int,
+    val delayMillis: Int,
+    val travelDistance: Float
+)
 
 private enum class ColoringTool {
     Brush,
@@ -373,9 +398,13 @@ fun FullScreenImageScreen(
     }
     var bitmapVersion by remember(image.id) { mutableStateOf(0) }
     var imageContainerSize by remember { mutableStateOf(IntSize.Zero) }
+    val revealPoints = remember(image.id) { mutableStateListOf<Offset>() }
+    var revealedCells by remember(image.id) { mutableStateOf(setOf<Int>()) }
     val imageBitmap = remember(bitmapVersion, colouringBitmap) {
         colouringBitmap.asImageBitmap()
     }
+    val revealProgress = revealedCells.size.toFloat() / (RevealGridColumns * RevealGridRows).toFloat()
+    val isRevealComplete = revealProgress >= RevealCompletionRatio
 
     Column(
         modifier = modifier
@@ -404,6 +433,13 @@ fun FullScreenImageScreen(
             }
         }
         Spacer(modifier = Modifier.size(16.dp))
+        if (!isRevealComplete) {
+            Text(
+                text = "Wipe the magic mist away to reveal the picture",
+                color = Color(0xFF7B6E62)
+            )
+            Spacer(modifier = Modifier.size(12.dp))
+        }
         Row(
             modifier = Modifier
                 .fillMaxSize()
@@ -431,7 +467,10 @@ fun FullScreenImageScreen(
                         .background(Color.White)
                         .padding(20.dp)
                         .onSizeChanged { imageContainerSize = it }
-                        .pointerInput(selectedTool, selectedColor, colouringBitmap, outlineBitmap, imageContainerSize) {
+                        .pointerInput(selectedTool, selectedColor, colouringBitmap, outlineBitmap, imageContainerSize, isRevealComplete) {
+                            if (!isRevealComplete) {
+                                return@pointerInput
+                            }
                             if (selectedTool == ColoringTool.Fill) {
                                 detectTapGestures { tapOffset ->
                                     val bitmapOffset = mapTapToBitmap(
@@ -535,6 +574,22 @@ fun FullScreenImageScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Fit
                     )
+
+                    if (!isRevealComplete) {
+                        MagicRevealOverlay(
+                            revealPoints = revealPoints,
+                            onRevealPoint = { point ->
+                                revealPoints.add(point)
+                                val cellIndex = revealCellIndex(
+                                    touchPoint = point,
+                                    containerSize = imageContainerSize
+                                )
+                                if (cellIndex >= 0) {
+                                    revealedCells = revealedCells + cellIndex
+                                }
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -562,6 +617,102 @@ fun AppImage(
             modifier = modifier,
             contentScale = contentScale
         )
+    }
+}
+
+@Composable
+private fun MagicRevealOverlay(
+    revealPoints: List<Offset>,
+    onRevealPoint: (Offset) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val magicStars = remember {
+        listOf(
+            MagicStar(Alignment.TopStart, 26, 24, 18, 2200, 0, 10f),
+            MagicStar(Alignment.TopEnd, 36, 30, 14, 2400, 300, 12f),
+            MagicStar(Alignment.TopCenter, 0, 18, 16, 2100, 150, 9f),
+            MagicStar(Alignment.CenterStart, 18, 0, 16, 2600, 600, 8f),
+            MagicStar(Alignment.Center, 0, 0, 14, 3000, 450, 7f),
+            MagicStar(Alignment.CenterEnd, 20, 12, 20, 2800, 900, 10f),
+            MagicStar(Alignment.BottomStart, 34, 30, 15, 2500, 1200, 9f),
+            MagicStar(Alignment.BottomCenter, 0, 26, 18, 2700, 1050, 10f),
+            MagicStar(Alignment.BottomEnd, 28, 24, 17, 2300, 1500, 11f)
+        )
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .pointerInput(Unit) {
+                detectDragGestures(
+                    onDragStart = { offset ->
+                        onRevealPoint(offset)
+                    }
+                ) { change, _ ->
+                    onRevealPoint(change.position)
+                    change.consume()
+                }
+            }
+    ) {
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
+        ) {
+            drawRect(Color(0xFFF8F3EC))
+            drawRect(Color.White.copy(alpha = 0.55f))
+
+            revealPoints.forEach { point ->
+                drawCircle(
+                    color = Color.Transparent,
+                    radius = RevealBrushRadius.toPx(),
+                    center = point,
+                    blendMode = BlendMode.Clear
+                )
+            }
+        }
+
+        magicStars.forEach { star ->
+            val transition = rememberInfiniteTransition(label = "magicStar")
+            val alpha by transition.animateFloat(
+                initialValue = 0.25f,
+                targetValue = 0.85f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(
+                        durationMillis = star.durationMillis,
+                        delayMillis = star.delayMillis
+                    ),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "starAlpha"
+            )
+            val translationY by transition.animateFloat(
+                initialValue = 0f,
+                targetValue = -star.travelDistance,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(
+                        durationMillis = star.durationMillis,
+                        delayMillis = star.delayMillis
+                    ),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "starFloat"
+            )
+
+            Icon(
+                imageVector = Icons.Filled.Star,
+                contentDescription = null,
+                tint = Color(0xFFFFF3B0),
+                modifier = Modifier
+                    .align(star.alignment)
+                    .padding(start = star.startPadding.dp, top = star.topPadding.dp)
+                    .size(star.size.dp)
+                    .graphicsLayer(
+                        alpha = alpha,
+                        translationY = translationY
+                    )
+            )
+        }
     }
 }
 
@@ -731,6 +882,21 @@ private fun ToolIcon(
                     vertical = ToolIconPaddingVertical
                 )
                 .size(ToolIconSize)
-        )
+            )
     }
+}
+
+private fun revealCellIndex(
+    touchPoint: Offset,
+    containerSize: IntSize
+): Int {
+    if (containerSize.width == 0 || containerSize.height == 0) {
+        return -1
+    }
+
+    val columnWidth = containerSize.width.toFloat() / RevealGridColumns
+    val rowHeight = containerSize.height.toFloat() / RevealGridRows
+    val column = (touchPoint.x / columnWidth).toInt().coerceIn(0, RevealGridColumns - 1)
+    val row = (touchPoint.y / rowHeight).toInt().coerceIn(0, RevealGridRows - 1)
+    return (row * RevealGridColumns) + column
 }

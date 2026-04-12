@@ -6,19 +6,24 @@ import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.Point
 import androidx.annotation.ColorInt
-import androidx.annotation.DrawableRes
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.unit.IntSize
+import com.example.colouringbook.data.ImageSource
 import java.util.ArrayDeque
 import kotlin.math.abs
 
 fun loadMutableBitmap(
     context: Context,
-    @DrawableRes imageRes: Int
+    imageSource: ImageSource
 ): Bitmap {
-    return BitmapFactory.decodeResource(context.resources, imageRes)
-        .copy(Bitmap.Config.ARGB_8888, true)
+    val bitmap = when {
+        imageSource.drawableRes != null -> BitmapFactory.decodeResource(context.resources, imageSource.drawableRes)
+        imageSource.assetPath != null -> context.assets.open(imageSource.assetPath).use(BitmapFactory::decodeStream)
+        else -> null
+    } ?: error("ImageSource must provide either drawableRes or assetPath")
+
+    return bitmap.copy(Bitmap.Config.ARGB_8888, true)
 }
 
 fun mapTapToBitmap(

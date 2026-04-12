@@ -60,6 +60,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.colouringbook.data.Category
 import com.example.colouringbook.data.ColouringImage
+import com.example.colouringbook.data.ImageSource
 import com.example.colouringbook.data.categoryImages
 import com.example.colouringbook.data.homeCategories
 import com.example.colouringbook.data.pastelPalette
@@ -68,6 +69,7 @@ import com.example.colouringbook.utils.floodFillWithinOutline
 import com.example.colouringbook.utils.loadMutableBitmap
 import com.example.colouringbook.utils.mapTapToBitmap
 import com.example.colouringbook.utils.toArgbInt
+import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -88,6 +90,7 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun ColouringBookApp(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
     val navController = rememberNavController()
 
     NavHost(
@@ -109,10 +112,11 @@ fun ColouringBookApp(modifier: Modifier = Modifier) {
         ) { backStackEntry ->
             val categoryId = backStackEntry.arguments?.getString("categoryId")
             val category = homeCategories.firstOrNull { it.id == categoryId } ?: homeCategories.first()
+            val images = categoryImages(context, category)
 
             CategoryScreen(
                 category = category,
-                images = categoryImages(category),
+                images = images,
                 onBackClick = { navController.popBackStack() },
                 onImageClick = { image ->
                     navController.navigate("image/${category.id}/${image.id}")
@@ -129,7 +133,8 @@ fun ColouringBookApp(modifier: Modifier = Modifier) {
             val categoryId = backStackEntry.arguments?.getString("categoryId")
             val imageId = backStackEntry.arguments?.getString("imageId")
             val category = homeCategories.firstOrNull { it.id == categoryId } ?: homeCategories.first()
-            val image = categoryImages(category).firstOrNull { it.id == imageId } ?: categoryImages(category).first()
+            val images = categoryImages(context, category)
+            val image = images.firstOrNull { it.id == imageId } ?: images.first()
 
             FullScreenImageScreen(
                 categoryTitle = category.title,
@@ -214,11 +219,11 @@ fun CategoryTileCard(
                     .fillMaxWidth()
                     .aspectRatio(1f)
                     .clip(androidx.compose.foundation.shape.RoundedCornerShape(18.dp))
-                    .background(Color(0xFFF8F1E4)),
+                    .background(Color.White),
                 contentAlignment = Alignment.Center
             ) {
-                Image(
-                    painter = painterResource(id = category.imageRes),
+                AppImage(
+                    imageSource = category.imageSource,
                     contentDescription = category.title,
                     modifier = Modifier.fillMaxWidth(),
                     contentScale = ContentScale.Fit
@@ -308,11 +313,11 @@ fun ColouringImageTile(
                     .fillMaxWidth()
                     .aspectRatio(1f)
                     .clip(androidx.compose.foundation.shape.RoundedCornerShape(18.dp))
-                    .background(Color(0xFFF8F1E4)),
+                    .background(Color.White),
                 contentAlignment = Alignment.Center
             ) {
-                Image(
-                    painter = painterResource(id = image.imageRes),
+                AppImage(
+                    imageSource = image.imageSource,
                     contentDescription = image.name,
                     modifier = Modifier.fillMaxWidth(),
                     contentScale = ContentScale.Fit
@@ -338,8 +343,8 @@ fun FullScreenImageScreen(
     val coroutineScope = rememberCoroutineScope()
     var selectedColor by remember { mutableStateOf(pastelPalette.first()) }
     var isFilling by remember(image.id) { mutableStateOf(false) }
-    val colouringBitmap = remember(image.id, image.imageRes) {
-        loadMutableBitmap(context, image.imageRes)
+    val colouringBitmap = remember(image.id, image.imageSource) {
+        loadMutableBitmap(context, image.imageSource)
     }
     var bitmapVersion by remember(image.id) { mutableStateOf(0) }
     var imageContainerSize by remember { mutableStateOf(IntSize.Zero) }
@@ -391,7 +396,7 @@ fun FullScreenImageScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color(0xFFF8F1E4))
+                    .background(Color.White)
                     .padding(20.dp)
                     .onSizeChanged { imageContainerSize = it }
                     .pointerInput(selectedColor, colouringBitmap, imageContainerSize, isFilling) {
@@ -437,6 +442,30 @@ fun FullScreenImageScreen(
                 )
             }
         }
+    }
+}
+
+@Composable
+fun AppImage(
+    imageSource: ImageSource,
+    contentDescription: String,
+    modifier: Modifier = Modifier,
+    contentScale: ContentScale = ContentScale.Fit
+) {
+    when {
+        imageSource.drawableRes != null -> Image(
+            painter = painterResource(id = imageSource.drawableRes),
+            contentDescription = contentDescription,
+            modifier = modifier,
+            contentScale = contentScale
+        )
+
+        imageSource.assetPath != null -> AsyncImage(
+            model = "file:///android_asset/${imageSource.assetPath}",
+            contentDescription = contentDescription,
+            modifier = modifier,
+            contentScale = contentScale
+        )
     }
 }
 

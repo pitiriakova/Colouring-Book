@@ -1,5 +1,6 @@
 package com.example.colouringbook.data
 
+import android.content.Context
 import androidx.annotation.DrawableRes
 import androidx.compose.ui.graphics.Color
 import com.example.colouringbook.R
@@ -7,20 +8,35 @@ import com.example.colouringbook.R
 data class Category(
     val id: String,
     val title: String,
-    @param:DrawableRes val imageRes: Int
+    val imageSource: ImageSource
 )
 
 data class ColouringImage(
     val id: String,
     val name: String,
-    @param:DrawableRes val imageRes: Int
+    val imageSource: ImageSource
+)
+
+data class ImageSource(
+    @param:DrawableRes val drawableRes: Int? = null,
+    val assetPath: String? = null
+)
+
+private val nicoleImageNames = mapOf(
+    "nicole_cap" to "Cap Smile",
+    "nicole_grandma_baby" to "Mama and Baby",
+    "nicole_sunglasses" to "Cool Sunglasses",
+    "nicole_slide" to "Slide Time",
+    "nicole_winter_hat" to "Winter Hat",
+    "nicole_tree" to "By the Tree",
+    "nicole_slide_2" to "Slide Adventure"
 )
 
 val homeCategories = listOf(
-    Category("cats", "Cats", R.drawable.cat_coloring),
-    Category("dinos", "Dinos", R.drawable.cat_coloring),
-    Category("dolls", "Dolls", R.drawable.cat_coloring),
-    Category("balls", "Balls", R.drawable.cat_coloring)
+    Category("cats", "Cats", ImageSource(assetPath = "sections/cats/cat_2.png")),
+    Category("dinos", "Dinos", ImageSource(assetPath = "sections/dinos/dino_1.png")),
+    Category("nicole", "Nicole", ImageSource(assetPath = "sections/nicole/nicole_slide.png")),
+    Category("balls", "Balls", ImageSource(assetPath = "sections/balls/ball_1.png"))
 )
 
 val pastelPalette = listOf(
@@ -36,11 +52,50 @@ val pastelPalette = listOf(
     Color(0xFFE4D8CF)
 )
 
-fun categoryImages(category: Category): List<ColouringImage> =
-    List(8) { index ->
+fun categoryImages(context: Context, category: Category): List<ColouringImage> {
+    val sectionPath = "sections/${category.id}"
+    val assetFiles = context.assets.list(sectionPath)
+        ?.filter { file -> file.substringAfterLast('.', "").lowercase() in setOf("png", "jpg", "jpeg", "webp") }
+        ?.sorted()
+        .orEmpty()
+
+    if (assetFiles.isNotEmpty()) {
+        return assetFiles.mapIndexed { index, fileName ->
+            val baseName = fileName.substringBeforeLast('.')
+            ColouringImage(
+                id = "${category.id}-${index + 1}",
+                name = displayNameFor(category.id, baseName, index + 1),
+                imageSource = ImageSource(assetPath = "$sectionPath/$fileName")
+            )
+        }
+    }
+
+    return List(8) { index ->
         ColouringImage(
             id = "${category.id}-${index + 1}",
             name = "${category.title} ${index + 1}",
-            imageRes = category.imageRes
+            imageSource = category.imageSource
         )
     }
+}
+
+private fun displayNameFor(categoryId: String, baseName: String, position: Int): String {
+    if (categoryId == "nicole") {
+        return nicoleImageNames[baseName] ?: prettifyName(baseName)
+    }
+
+    return prettifyName(baseName).ifBlank {
+        "${categoryId.replaceFirstChar { it.uppercase() }} $position"
+    }
+}
+
+private fun prettifyName(value: String): String {
+    return value
+        .replace('_', ' ')
+        .trim()
+        .split(Regex("\\s+"))
+        .filter { it.isNotBlank() }
+        .joinToString(" ") { word ->
+            word.replaceFirstChar { char -> char.uppercase() }
+        }
+}

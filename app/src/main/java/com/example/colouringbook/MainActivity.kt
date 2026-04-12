@@ -58,11 +58,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntSize
@@ -96,10 +98,10 @@ private val PaletteSwatchSpacing = 12.dp
 private val ToolIconSize = 36.dp
 private val ToolIconPaddingHorizontal = 12.dp
 private val ToolIconPaddingVertical = 10.dp
-private val RevealBrushRadius = 36.dp
-private const val RevealGridColumns = 12
-private const val RevealGridRows = 18
-private const val RevealCompletionRatio = 0.35f
+private val RevealBrushRadius = 72.dp
+private const val RevealGridColumns = 48
+private const val RevealGridRows = 72
+private const val RevealCompletionRatio = 0.995f
 
 private data class MagicStar(
     val alignment: Alignment,
@@ -109,6 +111,11 @@ private data class MagicStar(
     val durationMillis: Int,
     val delayMillis: Int,
     val travelDistance: Float
+)
+
+private data class RevealStroke(
+    val start: Offset,
+    val end: Offset
 )
 
 private enum class ColoringTool {
@@ -385,6 +392,7 @@ fun FullScreenImageScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val density = LocalDensity.current
     var selectedColor by remember { mutableStateOf(pastelPalette.first()) }
     var selectedTool by remember(image.id) { mutableStateOf(ColoringTool.Brush) }
     var isDrawing by remember(image.id) { mutableStateOf(false) }
@@ -398,11 +406,12 @@ fun FullScreenImageScreen(
     }
     var bitmapVersion by remember(image.id) { mutableStateOf(0) }
     var imageContainerSize by remember { mutableStateOf(IntSize.Zero) }
-    val revealPoints = remember(image.id) { mutableStateListOf<Offset>() }
+    val revealStrokes = remember(image.id) { mutableStateListOf<RevealStroke>() }
     var revealedCells by remember(image.id) { mutableStateOf(setOf<Int>()) }
     val imageBitmap = remember(bitmapVersion, colouringBitmap) {
         colouringBitmap.asImageBitmap()
     }
+    val revealBrushRadiusPx = with(density) { RevealBrushRadius.toPx() }
     val revealProgress = revealedCells.size.toFloat() / (RevealGridColumns * RevealGridRows).toFloat()
     val isRevealComplete = revealProgress >= RevealCompletionRatio
 
@@ -577,15 +586,18 @@ fun FullScreenImageScreen(
 
                     if (!isRevealComplete) {
                         MagicRevealOverlay(
-                            revealPoints = revealPoints,
-                            onRevealPoint = { point ->
-                                revealPoints.add(point)
-                                val cellIndex = revealCellIndex(
-                                    touchPoint = point,
-                                    containerSize = imageContainerSize
+                            revealStrokes = revealStrokes,
+                            brushRadius = RevealBrushRadius,
+                            onRevealStroke = { start, end ->
+                                revealStrokes.add(RevealStroke(start = start, end = end))
+                                val revealedByBrush = revealCellsForStroke(
+                                    startPoint = start,
+                                    endPoint = end,
+                                    containerSize = imageContainerSize,
+                                    brushRadiusPx = revealBrushRadiusPx
                                 )
-                                if (cellIndex >= 0) {
-                                    revealedCells = revealedCells + cellIndex
+                                if (revealedByBrush.isNotEmpty()) {
+                                    revealedCells = revealedCells + revealedByBrush
                                 }
                             }
                         )
@@ -622,21 +634,31 @@ fun AppImage(
 
 @Composable
 private fun MagicRevealOverlay(
-    revealPoints: List<Offset>,
-    onRevealPoint: (Offset) -> Unit,
+    revealStrokes: List<RevealStroke>,
+    brushRadius: androidx.compose.ui.unit.Dp,
+    onRevealStroke: (Offset, Offset) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val magicStars = remember {
         listOf(
-            MagicStar(Alignment.TopStart, 26, 24, 18, 2200, 0, 10f),
-            MagicStar(Alignment.TopEnd, 36, 30, 14, 2400, 300, 12f),
-            MagicStar(Alignment.TopCenter, 0, 18, 16, 2100, 150, 9f),
-            MagicStar(Alignment.CenterStart, 18, 0, 16, 2600, 600, 8f),
-            MagicStar(Alignment.Center, 0, 0, 14, 3000, 450, 7f),
-            MagicStar(Alignment.CenterEnd, 20, 12, 20, 2800, 900, 10f),
-            MagicStar(Alignment.BottomStart, 34, 30, 15, 2500, 1200, 9f),
-            MagicStar(Alignment.BottomCenter, 0, 26, 18, 2700, 1050, 10f),
-            MagicStar(Alignment.BottomEnd, 28, 24, 17, 2300, 1500, 11f)
+            MagicStar(Alignment.TopStart, 18, 18, 12, 2100, 0, 8f),
+            MagicStar(Alignment.TopStart, 42, 54, 22, 2600, 250, 12f),
+            MagicStar(Alignment.TopCenter, 0, 14, 16, 2300, 150, 9f),
+            MagicStar(Alignment.TopCenter, 42, 48, 10, 2800, 500, 6f),
+            MagicStar(Alignment.TopEnd, 22, 26, 14, 2400, 300, 10f),
+            MagicStar(Alignment.TopEnd, 58, 62, 24, 3000, 900, 14f),
+            MagicStar(Alignment.CenterStart, 14, 0, 18, 2500, 600, 10f),
+            MagicStar(Alignment.CenterStart, 44, 46, 11, 3200, 850, 7f),
+            MagicStar(Alignment.Center, 0, 0, 13, 2900, 450, 7f),
+            MagicStar(Alignment.Center, 70, 52, 20, 3400, 1100, 13f),
+            MagicStar(Alignment.CenterEnd, 18, 8, 15, 2700, 700, 9f),
+            MagicStar(Alignment.CenterEnd, 54, 58, 26, 3100, 1300, 15f),
+            MagicStar(Alignment.BottomStart, 24, 18, 17, 2550, 1200, 10f),
+            MagicStar(Alignment.BottomStart, 60, 58, 9, 2200, 1450, 6f),
+            MagicStar(Alignment.BottomCenter, 0, 18, 21, 2800, 1050, 12f),
+            MagicStar(Alignment.BottomCenter, 56, 60, 12, 2350, 1600, 8f),
+            MagicStar(Alignment.BottomEnd, 20, 20, 16, 2300, 1500, 11f),
+            MagicStar(Alignment.BottomEnd, 62, 56, 23, 2950, 1750, 14f)
         )
     }
 
@@ -644,12 +666,23 @@ private fun MagicRevealOverlay(
         modifier = modifier
             .fillMaxSize()
             .pointerInput(Unit) {
+                var previousPoint: Offset? = null
                 detectDragGestures(
                     onDragStart = { offset ->
-                        onRevealPoint(offset)
+                        previousPoint = offset
+                        onRevealStroke(offset, offset)
+                    },
+                    onDragEnd = {
+                        previousPoint = null
+                    },
+                    onDragCancel = {
+                        previousPoint = null
                     }
                 ) { change, _ ->
-                    onRevealPoint(change.position)
+                    val currentPoint = change.position
+                    val startPoint = previousPoint ?: currentPoint
+                    onRevealStroke(startPoint, currentPoint)
+                    previousPoint = currentPoint
                     change.consume()
                 }
             }
@@ -659,14 +692,16 @@ private fun MagicRevealOverlay(
                 .fillMaxSize()
                 .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
         ) {
-            drawRect(Color(0xFFF8F3EC))
-            drawRect(Color.White.copy(alpha = 0.55f))
+            drawRect(Color(0xFFDCEEFF))
+            drawRect(Color(0xFFBFE3FF).copy(alpha = 0.58f))
 
-            revealPoints.forEach { point ->
-                drawCircle(
+            revealStrokes.forEach { stroke ->
+                drawLine(
                     color = Color.Transparent,
-                    radius = RevealBrushRadius.toPx(),
-                    center = point,
+                    start = stroke.start,
+                    end = stroke.end,
+                    strokeWidth = brushRadius.toPx() * 2f,
+                    cap = StrokeCap.Round,
                     blendMode = BlendMode.Clear
                 )
             }
@@ -886,17 +921,56 @@ private fun ToolIcon(
     }
 }
 
-private fun revealCellIndex(
-    touchPoint: Offset,
-    containerSize: IntSize
-): Int {
+private fun revealCellsForStroke(
+    startPoint: Offset,
+    endPoint: Offset,
+    containerSize: IntSize,
+    brushRadiusPx: Float
+): Set<Int> {
     if (containerSize.width == 0 || containerSize.height == 0) {
-        return -1
+        return emptySet()
     }
 
     val columnWidth = containerSize.width.toFloat() / RevealGridColumns
     val rowHeight = containerSize.height.toFloat() / RevealGridRows
-    val column = (touchPoint.x / columnWidth).toInt().coerceIn(0, RevealGridColumns - 1)
-    val row = (touchPoint.y / rowHeight).toInt().coerceIn(0, RevealGridRows - 1)
-    return (row * RevealGridColumns) + column
+    val minX = minOf(startPoint.x, endPoint.x) - brushRadiusPx
+    val maxX = maxOf(startPoint.x, endPoint.x) + brushRadiusPx
+    val minY = minOf(startPoint.y, endPoint.y) - brushRadiusPx
+    val maxY = maxOf(startPoint.y, endPoint.y) + brushRadiusPx
+    val minColumn = (minX / columnWidth).toInt().coerceIn(0, RevealGridColumns - 1)
+    val maxColumn = (maxX / columnWidth).toInt().coerceIn(0, RevealGridColumns - 1)
+    val minRow = (minY / rowHeight).toInt().coerceIn(0, RevealGridRows - 1)
+    val maxRow = (maxY / rowHeight).toInt().coerceIn(0, RevealGridRows - 1)
+
+    val revealed = mutableSetOf<Int>()
+    for (row in minRow..maxRow) {
+        for (column in minColumn..maxColumn) {
+            val cellCenter = Offset(
+                x = (column + 0.5f) * columnWidth,
+                y = (row + 0.5f) * rowHeight
+            )
+            if (distanceToSegment(cellCenter, startPoint, endPoint) <= brushRadiusPx) {
+                revealed += (row * RevealGridColumns) + column
+            }
+        }
+    }
+
+    return revealed
+}
+
+private fun distanceToSegment(point: Offset, segmentStart: Offset, segmentEnd: Offset): Float {
+    val dx = segmentEnd.x - segmentStart.x
+    val dy = segmentEnd.y - segmentStart.y
+    if (dx == 0f && dy == 0f) {
+        return point.minus(segmentStart).getDistance()
+    }
+
+    val t = (((point.x - segmentStart.x) * dx) + ((point.y - segmentStart.y) * dy)) /
+        ((dx * dx) + (dy * dy))
+    val clampedT = t.coerceIn(0f, 1f)
+    val projection = Offset(
+        x = segmentStart.x + (dx * clampedT),
+        y = segmentStart.y + (dy * clampedT)
+    )
+    return point.minus(projection).getDistance()
 }

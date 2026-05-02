@@ -216,7 +216,10 @@ fun HomeScreen(
             )
     ) {
         val availableGridHeight = (maxHeight - 70.dp).coerceAtLeast(320.dp)
-        val tileHeight = ((availableGridHeight - HomeGridGap) / 2).coerceAtLeast(150.dp)
+        val rowCount = ((categories.size + 1) / 2).coerceAtLeast(1)
+        val tileHeight = (
+            (availableGridHeight - (HomeGridGap * (rowCount - 1))) / rowCount
+        ).coerceAtLeast(120.dp)
 
         Column(modifier = Modifier.fillMaxSize()) {
             Text(
@@ -238,7 +241,7 @@ fun HomeScreen(
                     .height(availableGridHeight),
                 horizontalArrangement = Arrangement.spacedBy(HomeGridGap),
                 verticalArrangement = Arrangement.spacedBy(HomeGridGap),
-                userScrollEnabled = false
+                userScrollEnabled = rowCount > 2
             ) {
                 items(categories) { category ->
                     CategoryTileCard(

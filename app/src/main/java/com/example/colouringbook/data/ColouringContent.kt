@@ -38,10 +38,18 @@ private val nicoleImageNames = mapOf(
 
 val homeCategories = listOf(
     Category(
+        id = "animals",
+        title = "Animals",
+        imageSource = ImageSource(assetPath = "sections/animals/animal_1.png"),
+        tileImageSource = ImageSource(assetPath = "tiles/tile_animals.png"),
+        accentColor = Color(0xFFD7E8FF),
+        borderColor = Color(0xFFA8C6F4)
+    ),
+    Category(
         id = "cats",
         title = "Cats",
         imageSource = ImageSource(assetPath = "sections/cats/cat_2.png"),
-        tileImageSource = ImageSource(assetPath = "tiles/tile_cats.png"),
+        tileImageSource = ImageSource(assetPath = "tiles/tile_dinos.png"),
         accentColor = Color(0xFFFFE0C8),
         borderColor = Color(0xFFFFB4A0)
     ),
@@ -49,14 +57,22 @@ val homeCategories = listOf(
         id = "dinos",
         title = "Dinos",
         imageSource = ImageSource(assetPath = "sections/dinos/dino_1.png"),
-        tileImageSource = ImageSource(assetPath = "tiles/tile_dinos.png"),
+        tileImageSource = ImageSource(assetPath = "tiles/tile_cats.png"),
         accentColor = Color(0xFFC8F0D8),
         borderColor = Color(0xFF90D9A8)
     ),
     Category(
+        id = "music",
+        title = "Music",
+        imageSource = ImageSource(assetPath = "sections/music/music_1.png"),
+        tileImageSource = ImageSource(assetPath = "tiles/tile_music.png"),
+        accentColor = Color(0xFFE8D8FF),
+        borderColor = Color(0xFFC5A6F5)
+    ),
+    Category(
         id = "nicole",
         title = "Nicole",
-        imageSource = ImageSource(assetPath = "sections/nicole/nicole_slide.png"),
+        imageSource = ImageSource(assetPath = "sections/nicole/nicole_1.png"),
         tileImageSource = ImageSource(assetPath = "tiles/tile_nicole.png"),
         accentColor = Color(0xFFFFD6E8),
         borderColor = Color(0xFFF4A8C4)
@@ -142,11 +158,23 @@ private fun imageBorderPalette(category: Category): List<Color> {
             Color(0xFFEE95B7),
             Color(0xFFF9CCE0)
         )
+        "music" -> listOf(
+            Color(0xFFC5A6F5),
+            Color(0xFFD4BDF8),
+            Color(0xFFB48EEB),
+            Color(0xFFE3D3FB)
+        )
         "balls" -> listOf(
             Color(0xFFFFD966),
             Color(0xFFFFE27F),
             Color(0xFFFFCD47),
             Color(0xFFFFE99E)
+        )
+        "animals" -> listOf(
+            Color(0xFFA8C6F4),
+            Color(0xFFBCD4F8),
+            Color(0xFF95B8EE),
+            Color(0xFFD0E2FB)
         )
         else -> listOf(category.borderColor)
     }

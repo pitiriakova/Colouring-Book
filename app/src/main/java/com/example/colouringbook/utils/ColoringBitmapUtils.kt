@@ -216,6 +216,47 @@ fun applyBrushStrokeWithinMask(
     return changed
 }
 
+fun restoreRegionFromSource(
+    targetBitmap: Bitmap,
+    sourceBitmap: Bitmap,
+    startX: Int,
+    startY: Int
+): Boolean {
+    val regionMask = buildFillRegionMask(sourceBitmap, startX, startY) ?: return false
+    return restoreMaskedPixels(
+        targetBitmap = targetBitmap,
+        sourceBitmap = sourceBitmap,
+        regionMask = regionMask
+    )
+}
+
+fun restoreBrushStrokeWithinMask(
+    targetBitmap: Bitmap,
+    sourceBitmap: Bitmap,
+    regionMask: BooleanArray,
+    startX: Int,
+    startY: Int,
+    endX: Int,
+    endY: Int,
+    brushRadiusPx: Int
+): Boolean {
+    var changed = false
+    val deltaX = (endX - startX).toFloat()
+    val deltaY = (endY - startY).toFloat()
+    val steps = maxOf(1, ceil(sqrt(deltaX * deltaX + deltaY * deltaY).toDouble()).toInt())
+
+    for (step in 0..steps) {
+        val fraction = step / steps.toFloat()
+        val x = (startX + deltaX * fraction).toInt()
+        val y = (startY + deltaY * fraction).toInt()
+        if (restoreBrushDot(targetBitmap, sourceBitmap, regionMask, x, y, brushRadiusPx)) {
+            changed = true
+        }
+    }
+
+    return changed
+}
+
 private fun enqueueAdjacentRuns(
     pixels: IntArray,
     width: Int,
@@ -299,6 +340,65 @@ private fun paintBrushDot(
             if (colorsAreClose(currentColor, replacementColor)) continue
 
             bitmap.setPixel(x, y, replacementColor)
+            changed = true
+        }
+    }
+
+    return changed
+}
+
+private fun restoreMaskedPixels(
+    targetBitmap: Bitmap,
+    sourceBitmap: Bitmap,
+    regionMask: BooleanArray
+): Boolean {
+    val width = minOf(targetBitmap.width, sourceBitmap.width)
+    val height = minOf(targetBitmap.height, sourceBitmap.height)
+    var changed = false
+
+    for (y in 0 until height) {
+        for (x in 0 until width) {
+            val index = y * width + x
+            if (!regionMask[index]) continue
+            val sourceColor = sourceBitmap.getPixel(x, y)
+            if (targetBitmap.getPixel(x, y) == sourceColor) continue
+            targetBitmap.setPixel(x, y, sourceColor)
+            changed = true
+        }
+    }
+
+    return changed
+}
+
+private fun restoreBrushDot(
+    targetBitmap: Bitmap,
+    sourceBitmap: Bitmap,
+    regionMask: BooleanArray,
+    centerX: Int,
+    centerY: Int,
+    brushRadiusPx: Int
+): Boolean {
+    val width = minOf(targetBitmap.width, sourceBitmap.width)
+    val height = minOf(targetBitmap.height, sourceBitmap.height)
+    val radiusSquared = brushRadiusPx * brushRadiusPx
+    var changed = false
+
+    for (y in (centerY - brushRadiusPx)..(centerY + brushRadiusPx)) {
+        if (y !in 0 until height) continue
+        for (x in (centerX - brushRadiusPx)..(centerX + brushRadiusPx)) {
+            if (x !in 0 until width) continue
+
+            val dx = x - centerX
+            val dy = y - centerY
+            if (dx * dx + dy * dy > radiusSquared) continue
+
+            val index = y * width + x
+            if (!regionMask[index]) continue
+
+            val sourceColor = sourceBitmap.getPixel(x, y)
+            if (targetBitmap.getPixel(x, y) == sourceColor) continue
+
+            targetBitmap.setPixel(x, y, sourceColor)
             changed = true
         }
     }

@@ -8,13 +8,17 @@ import com.example.colouringbook.R
 data class Category(
     val id: String,
     val title: String,
-    val imageSource: ImageSource
+    val imageSource: ImageSource,
+    val tileImageSource: ImageSource = imageSource,
+    val accentColor: Color,
+    val borderColor: Color
 )
 
 data class ColouringImage(
     val id: String,
     val name: String,
-    val imageSource: ImageSource
+    val imageSource: ImageSource,
+    val borderColor: Color
 )
 
 data class ImageSource(
@@ -33,10 +37,38 @@ private val nicoleImageNames = mapOf(
 )
 
 val homeCategories = listOf(
-    Category("cats", "Cats", ImageSource(assetPath = "sections/cats/cat_2.png")),
-    Category("dinos", "Dinos", ImageSource(assetPath = "sections/dinos/dino_1.png")),
-    Category("nicole", "Nicole", ImageSource(assetPath = "sections/nicole/nicole_slide.png")),
-    Category("balls", "Balls", ImageSource(assetPath = "sections/balls/ball_1.png"))
+    Category(
+        id = "cats",
+        title = "Cats",
+        imageSource = ImageSource(assetPath = "sections/cats/cat_2.png"),
+        tileImageSource = ImageSource(assetPath = "tiles/tile_cats.png"),
+        accentColor = Color(0xFFFFE0C8),
+        borderColor = Color(0xFFFFB4A0)
+    ),
+    Category(
+        id = "dinos",
+        title = "Dinos",
+        imageSource = ImageSource(assetPath = "sections/dinos/dino_1.png"),
+        tileImageSource = ImageSource(assetPath = "tiles/tile_dinos.png"),
+        accentColor = Color(0xFFC8F0D8),
+        borderColor = Color(0xFF90D9A8)
+    ),
+    Category(
+        id = "nicole",
+        title = "Nicole",
+        imageSource = ImageSource(assetPath = "sections/nicole/nicole_slide.png"),
+        tileImageSource = ImageSource(assetPath = "tiles/tile_nicole.png"),
+        accentColor = Color(0xFFFFD6E8),
+        borderColor = Color(0xFFF4A8C4)
+    ),
+    Category(
+        id = "balls",
+        title = "Balls",
+        imageSource = ImageSource(assetPath = "sections/balls/ball_1.png"),
+        tileImageSource = ImageSource(assetPath = "tiles/tile_balls.png"),
+        accentColor = Color(0xFFFFF3C0),
+        borderColor = Color(0xFFFFD966)
+    )
 )
 
 val pastelPalette = listOf(
@@ -62,6 +94,7 @@ val pastelPalette = listOf(
 
 fun categoryImages(context: Context, category: Category): List<ColouringImage> {
     val sectionPath = "sections/${category.id}"
+    val borderPalette = imageBorderPalette(category)
     val assetFiles = context.assets.list(sectionPath)
         ?.filter { file -> file.substringAfterLast('.', "").lowercase() in setOf("png", "jpg", "jpeg", "webp") }
         ?.sorted()
@@ -73,7 +106,8 @@ fun categoryImages(context: Context, category: Category): List<ColouringImage> {
             ColouringImage(
                 id = "${category.id}-${index + 1}",
                 name = displayNameFor(category.id, baseName, index + 1),
-                imageSource = ImageSource(assetPath = "$sectionPath/$fileName")
+                imageSource = ImageSource(assetPath = "$sectionPath/$fileName"),
+                borderColor = borderPalette[index % borderPalette.size]
             )
         }
     }
@@ -82,8 +116,39 @@ fun categoryImages(context: Context, category: Category): List<ColouringImage> {
         ColouringImage(
             id = "${category.id}-${index + 1}",
             name = "${category.title} ${index + 1}",
-            imageSource = category.imageSource
+            imageSource = category.imageSource,
+            borderColor = borderPalette[index % borderPalette.size]
         )
+    }
+}
+
+private fun imageBorderPalette(category: Category): List<Color> {
+    return when (category.id) {
+        "cats" -> listOf(
+            Color(0xFFFFB4A0),
+            Color(0xFFFFC4B5),
+            Color(0xFFFFD1C5),
+            Color(0xFFFFA996)
+        )
+        "dinos" -> listOf(
+            Color(0xFF90D9A8),
+            Color(0xFFA8E2B8),
+            Color(0xFF7FCE9A),
+            Color(0xFFBDEAC8)
+        )
+        "nicole" -> listOf(
+            Color(0xFFF4A8C4),
+            Color(0xFFF7BCD3),
+            Color(0xFFEE95B7),
+            Color(0xFFF9CCE0)
+        )
+        "balls" -> listOf(
+            Color(0xFFFFD966),
+            Color(0xFFFFE27F),
+            Color(0xFFFFCD47),
+            Color(0xFFFFE99E)
+        )
+        else -> listOf(category.borderColor)
     }
 }
 

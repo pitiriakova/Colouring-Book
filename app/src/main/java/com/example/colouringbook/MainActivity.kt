@@ -71,18 +71,21 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -127,6 +130,7 @@ private val ScreenPaddingTop = 28.dp
 private val ScreenPaddingBottom = 20.dp
 private val HomeGridGap = 14.dp
 private val CardRadius = 20.dp
+private val HomeTileCircleSize = 195.dp
 private val HeaderBackSize = 76.dp
 private val HeaderBackIconSize = 32.dp
 private val ToolbarButtonSize = 84.dp
@@ -256,42 +260,69 @@ fun HomeScreen(
         val tileHeight = 252.dp
         val gridHeight = (tileHeight * rowCount) + (HomeGridGap * (rowCount - 1))
 
-        Column(modifier = Modifier.fillMaxSize()) {
-            Text(
-                text = "Nicole Draws \uD83C\uDFA8",
-                style = MaterialTheme.typography.headlineLarge,
-                color = MintText
-            )
-            Spacer(modifier = Modifier.size(2.dp))
-            Text(
-                text = "Pick a category to colour!",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MintTextMuted
-            )
-            Spacer(modifier = Modifier.size(18.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                contentAlignment = Alignment.Center
-            ) {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(columns),
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                Text(
+                    text = "Nicole Draws \uD83C\uDFA8",
+                    style = MaterialTheme.typography.headlineLarge,
+                    color = MintText
+                )
+                Spacer(modifier = Modifier.size(18.dp))
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(gridHeight),
-                    horizontalArrangement = Arrangement.spacedBy(HomeGridGap),
-                    verticalArrangement = Arrangement.spacedBy(HomeGridGap),
-                    userScrollEnabled = false
+                        .weight(1f),
+                    contentAlignment = Alignment.Center
                 ) {
-                    items(categories) { category ->
-                        CategoryTileCard(
-                            category = category,
-                            onClick = { onCategoryClick(category) },
-                            modifier = Modifier.height(tileHeight)
-                        )
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(columns),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(gridHeight),
+                        horizontalArrangement = Arrangement.spacedBy(HomeGridGap),
+                        verticalArrangement = Arrangement.spacedBy(HomeGridGap),
+                        userScrollEnabled = false
+                    ) {
+                        items(categories) { category ->
+                            CategoryTileCard(
+                                category = category,
+                                onClick = { onCategoryClick(category) },
+                                modifier = Modifier.height(tileHeight)
+                            )
+                        }
                     }
                 }
+            }
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 8.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                /*
+                Surface(
+                    modifier = Modifier.size(48.dp),
+                    color = Color.Transparent,
+                    shape = androidx.compose.foundation.shape.CircleShape,
+                    border = BorderStroke(1.5.dp, MintLine)
+                ) {
+                    AppImage(
+                        imageSource = ImageSource(assetPath = "tiles/logo_one_moms_studio.png"),
+                        contentDescription = "One mom's studio",
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(3.dp),
+                        contentScale = ContentScale.Crop
+                    )
+                }
+                */
+                Text(
+                    text = "One mom's studio",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MintText
+                )
             }
         }
     }
@@ -303,48 +334,43 @@ private fun CategoryTileCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Surface(
+    Column(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        color = Color.Transparent,
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(CardRadius),
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
     ) {
-        Column(
+        Surface(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+                .size(HomeTileCircleSize)
+                .aspectRatio(1f)
+                .clip(androidx.compose.foundation.shape.CircleShape)
+                .clickable(onClick = onClick),
+            color = Color.Transparent,
+            shape = androidx.compose.foundation.shape.CircleShape
         ) {
             Box(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .border(3.5.dp, category.borderColor, androidx.compose.foundation.shape.CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(195.dp)
-                        .aspectRatio(1f)
-                        .clip(androidx.compose.foundation.shape.CircleShape)
-                        .border(3.5.dp, category.borderColor, androidx.compose.foundation.shape.CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    AppImage(
-                        imageSource = category.tileImageSource,
-                        contentDescription = category.title,
-                        modifier = Modifier.fillMaxSize(0.9f),
-                        contentScale = ContentScale.Fit
-                    )
-                }
+                AppImage(
+                    imageSource = category.tileImageSource,
+                    contentDescription = category.title,
+                    modifier = Modifier.fillMaxSize(0.9f),
+                    contentScale = ContentScale.Fit
+                )
             }
-            Spacer(modifier = Modifier.size(8.dp))
-            Text(
-                text = category.title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.ExtraBold,
-                color = MintText
-            )
         }
+        Spacer(modifier = Modifier.size(8.dp))
+        Text(
+            text = category.title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.ExtraBold,
+            color = MintText
+        )
     }
 }
 
@@ -362,15 +388,10 @@ fun CategoryScreen(
             .background(MintBackground)
     ) {
         ScreenHeader(
-            eyebrow = "Category",
             title = category.title,
-            onBackClick = onBackClick
-        )
-        Text(
-            text = "Choose a picture to colour",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MintTextMuted,
-            modifier = Modifier.padding(start = 86.dp, end = 24.dp, bottom = 8.dp)
+            onBackClick = onBackClick,
+            titleColor = category.borderColor,
+            outlinedTitles = true
         )
         LazyVerticalGrid(
             columns = GridCells.Fixed(3),
@@ -397,6 +418,8 @@ private fun ScreenHeader(
     eyebrow: String? = null,
     title: String,
     onBackClick: () -> Unit,
+    titleColor: Color = MintText,
+    outlinedTitles: Boolean = false,
     centerContent: @Composable (() -> Unit)? = null,
     actions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {}
 ) {
@@ -410,6 +433,7 @@ private fun ScreenHeader(
         Surface(
             modifier = Modifier
                 .size(HeaderBackSize)
+                .clip(androidx.compose.foundation.shape.CircleShape)
                 .clickable(onClick = onBackClick),
             color = MintCard,
             shape = androidx.compose.foundation.shape.CircleShape,
@@ -430,16 +454,18 @@ private fun ScreenHeader(
                 verticalArrangement = Arrangement.spacedBy(3.dp)
             ) {
                 if (eyebrow != null) {
-                    Text(
+                    HeaderTitleText(
                         text = eyebrow.uppercase(),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MintTextMuted
+                        style = MaterialTheme.typography.titleSmall,
+                        color = titleColor,
+                        outlined = outlinedTitles
                     )
                 }
-                Text(
+                HeaderTitleText(
                     text = title,
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MintText
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = titleColor,
+                    outlined = outlinedTitles
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), content = actions)
@@ -452,6 +478,32 @@ private fun ScreenHeader(
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), content = actions)
         }
+    }
+}
+
+@Composable
+private fun HeaderTitleText(
+    text: String,
+    style: androidx.compose.ui.text.TextStyle,
+    color: Color,
+    outlined: Boolean
+) {
+    if (!outlined) {
+        Text(text = text, style = style, color = color)
+        return
+    }
+
+    Box {
+        Text(
+            text = text,
+            style = style.copy(drawStyle = Stroke(width = 6f)),
+            color = MintCard
+        )
+        Text(
+            text = text,
+            style = style,
+            color = color
+        )
     }
 }
 
@@ -603,7 +655,7 @@ private fun DrawingScreen(
                 ) {
                     DrawingPaletteSidebar(
                         selectedColor = selectedColor,
-                        colors = pastelPalette.take(5),
+                        colors = pastelPalette.take(6),
                         onColorSelected = { selectedColor = it },
                         onMoreColorsClick = {
                             pendingSelectedColor = selectedColor
@@ -664,6 +716,7 @@ private fun MistHintRow(
         Surface(
             modifier = Modifier
                 .size(HeaderBackSize)
+                .clip(androidx.compose.foundation.shape.CircleShape)
                 .clickable(onClick = onBackClick),
             color = MintCard,
             shape = androidx.compose.foundation.shape.CircleShape,
@@ -964,36 +1017,32 @@ private fun PaletteSwatch(
     size: Dp,
     onClick: () -> Unit
 ) {
-    Box(
+    val borderWidth = if (selected) 4.dp else if (color == Color.White) 1.5.dp else 0.dp
+    Surface(
         modifier = Modifier
             .size(size)
-            .border(
-                width = if (selected) 2.5.dp else 0.dp,
-                color = MintLineStrong,
-                shape = androidx.compose.foundation.shape.CircleShape
-            )
-            .padding(if (selected) 4.dp else 0.dp)
-            .size(size - if (selected) 8.dp else 0.dp)
+            .graphicsLayer {
+                if (selected) {
+                    scaleX = 1.08f
+                    scaleY = 1.08f
+                }
+            }
             .clip(androidx.compose.foundation.shape.CircleShape)
-            .clickable(onClick = onClick)
+            .clickable(onClick = onClick),
+        color = color,
+        shape = androidx.compose.foundation.shape.CircleShape,
+        border = if (borderWidth > 0.dp) {
+            BorderStroke(borderWidth, if (selected) MintLineStrong else MintLineStrong)
+        } else {
+            null
+        }
     ) {
         Box(
             modifier = Modifier
-                .matchParentSize()
+                .fillMaxSize()
                 .padding(top = 5.dp)
                 .clip(androidx.compose.foundation.shape.CircleShape)
                 .background(color.copy(alpha = 0.22f))
-        )
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .clip(androidx.compose.foundation.shape.CircleShape)
-                .background(color)
-                .border(
-                    width = if (selected) 2.5.dp else if (color == Color.White) 1.5.dp else 0.dp,
-                    color = if (selected) Color.White else MintLineStrong,
-                    shape = androidx.compose.foundation.shape.CircleShape
-                )
         )
     }
 }
@@ -1006,6 +1055,7 @@ private fun PlusColorButton(
     Surface(
         modifier = Modifier
             .size(size)
+            .clip(androidx.compose.foundation.shape.CircleShape)
             .clickable(onClick = onClick),
         color = MintBackgroundSoft,
         shape = androidx.compose.foundation.shape.CircleShape,
@@ -1107,6 +1157,7 @@ private fun PickerActionButton(
     Surface(
         modifier = Modifier
             .size(ToolbarButtonSize)
+            .clip(androidx.compose.foundation.shape.CircleShape)
             .clickable(onClick = onClick),
         color = containerColor,
         shape = androidx.compose.foundation.shape.CircleShape,
@@ -1194,10 +1245,12 @@ private fun ToolButton(
 ) {
     Surface(
         modifier = Modifier
-            .size(ToolbarButtonSize)
+            .size(if (selected) ToolbarButtonSize + 6.dp else ToolbarButtonSize)
+            .clip(androidx.compose.foundation.shape.CircleShape)
             .clickable(onClick = onClick),
-        color = if (selected) Color.White else Color.Transparent,
-        shape = androidx.compose.foundation.shape.CircleShape
+        color = Color.Transparent,
+        shape = androidx.compose.foundation.shape.CircleShape,
+        border = if (selected) BorderStroke(3.dp, MintLineStrong) else null
     ) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             if (icon != null) {
@@ -1244,6 +1297,7 @@ private fun ToolbarCircleButton(
     Surface(
         modifier = Modifier
             .size(size)
+            .clip(androidx.compose.foundation.shape.CircleShape)
             .clickable(onClick = onClick),
         color = MintCard,
         shape = androidx.compose.foundation.shape.CircleShape,

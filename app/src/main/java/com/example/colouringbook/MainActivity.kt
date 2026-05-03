@@ -7,11 +7,11 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -34,12 +35,17 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Brush
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CleaningServices
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FormatColorFill
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
@@ -93,11 +99,14 @@ import com.example.colouringbook.ui.theme.ColouringBookTheme
 import com.example.colouringbook.ui.theme.MintBackground
 import com.example.colouringbook.ui.theme.MintBackgroundSoft
 import com.example.colouringbook.ui.theme.MintCard
+import com.example.colouringbook.ui.theme.MintLine
+import com.example.colouringbook.ui.theme.MintLineStrong
 import com.example.colouringbook.ui.theme.MintMist
 import com.example.colouringbook.ui.theme.MintMistDeep
 import com.example.colouringbook.ui.theme.MintProgressEnd
 import com.example.colouringbook.ui.theme.MintProgressStart
 import com.example.colouringbook.ui.theme.MintText
+import com.example.colouringbook.ui.theme.MintTextSecondary
 import com.example.colouringbook.ui.theme.MintTextMuted
 import com.example.colouringbook.utils.applyBrushStrokeWithinMask
 import com.example.colouringbook.utils.buildFillRegionMask
@@ -105,9 +114,11 @@ import com.example.colouringbook.utils.floodFillWithinOutline
 import com.example.colouringbook.utils.loadImmutableBitmap
 import com.example.colouringbook.utils.loadMutableBitmap
 import com.example.colouringbook.utils.mapTapToBitmap
+import com.example.colouringbook.utils.restoreBitmapFromSource
 import com.example.colouringbook.utils.restoreBrushStrokeWithinMask
 import com.example.colouringbook.utils.restoreRegionFromSource
 import com.example.colouringbook.utils.toArgbInt
+import kotlin.random.Random
 
 private const val BRUSH_THICKNESS_PX = 15
 private const val BRUSH_RADIUS_PX = BRUSH_THICKNESS_PX / 2
@@ -115,8 +126,11 @@ private val ScreenPaddingHorizontal = 24.dp
 private val ScreenPaddingTop = 28.dp
 private val ScreenPaddingBottom = 20.dp
 private val HomeGridGap = 14.dp
-private val CardRadius = 28.dp
-private val HeaderBackSize = 64.dp
+private val CardRadius = 20.dp
+private val HeaderBackSize = 76.dp
+private val HeaderBackIconSize = 32.dp
+private val ToolbarButtonSize = 84.dp
+private val ToolbarButtonIconSize = 34.dp
 private val RevealBrushRadius = 108.dp
 private const val RevealGridColumns = 48
 private const val RevealGridRows = 72
@@ -160,7 +174,29 @@ fun ColouringBookApp(modifier: Modifier = Modifier) {
         composable("home") {
             HomeScreen(
                 categories = homeCategories,
-                onCategoryClick = { navController.navigate("category/${it.id}") }
+                onCategoryClick = {
+                    if (it.id == "surprise") {
+                        navController.navigate("surprise")
+                    } else {
+                        navController.navigate("category/${it.id}")
+                    }
+                }
+            )
+        }
+        composable("surprise") {
+            val surpriseCategory = homeCategories.firstOrNull { it.id == "surprise" } ?: homeCategories.first()
+            val eligibleCategories = remember {
+                homeCategories.filter { category -> category.id != "surprise" }
+            }
+            val surpriseImage = remember {
+                val imagePool = eligibleCategories.flatMap { categoryImages(context, it) }
+                imagePool[Random.nextInt(imagePool.size)]
+            }
+
+            DrawingScreen(
+                category = surpriseCategory,
+                image = surpriseImage,
+                onBackClick = { navController.popBackStack() }
             )
         }
         composable(
@@ -215,11 +251,10 @@ fun HomeScreen(
                 bottom = ScreenPaddingBottom
             )
     ) {
-        val availableGridHeight = (maxHeight - 70.dp).coerceAtLeast(320.dp)
-        val rowCount = ((categories.size + 1) / 2).coerceAtLeast(1)
-        val tileHeight = (
-            (availableGridHeight - (HomeGridGap * (rowCount - 1))) / rowCount
-        ).coerceAtLeast(120.dp)
+        val columns = 4
+        val rowCount = ((categories.size + columns - 1) / columns).coerceAtLeast(1)
+        val tileHeight = 252.dp
+        val gridHeight = (tileHeight * rowCount) + (HomeGridGap * (rowCount - 1))
 
         Column(modifier = Modifier.fillMaxSize()) {
             Text(
@@ -234,21 +269,28 @@ fun HomeScreen(
                 color = MintTextMuted
             )
             Spacer(modifier = Modifier.size(18.dp))
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(availableGridHeight),
-                horizontalArrangement = Arrangement.spacedBy(HomeGridGap),
-                verticalArrangement = Arrangement.spacedBy(HomeGridGap),
-                userScrollEnabled = rowCount > 2
+                    .weight(1f),
+                contentAlignment = Alignment.Center
             ) {
-                items(categories) { category ->
-                    CategoryTileCard(
-                        category = category,
-                        onClick = { onCategoryClick(category) },
-                        modifier = Modifier.height(tileHeight)
-                    )
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(columns),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(gridHeight),
+                    horizontalArrangement = Arrangement.spacedBy(HomeGridGap),
+                    verticalArrangement = Arrangement.spacedBy(HomeGridGap),
+                    userScrollEnabled = false
+                ) {
+                    items(categories) { category ->
+                        CategoryTileCard(
+                            category = category,
+                            onClick = { onCategoryClick(category) },
+                            modifier = Modifier.height(tileHeight)
+                        )
+                    }
                 }
             }
         }
@@ -273,30 +315,29 @@ private fun CategoryTileCard(
                 .fillMaxSize()
                 .padding(horizontal = 8.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.Center
         ) {
             Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth(),
                 contentAlignment = Alignment.Center
             ) {
                 Box(
                     modifier = Modifier
-                        .fillMaxHeight()
+                        .size(195.dp)
                         .aspectRatio(1f)
                         .clip(androidx.compose.foundation.shape.CircleShape)
-                        .border(4.dp, category.borderColor, androidx.compose.foundation.shape.CircleShape),
+                        .border(3.5.dp, category.borderColor, androidx.compose.foundation.shape.CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     AppImage(
                         imageSource = category.tileImageSource,
                         contentDescription = category.title,
-                        modifier = Modifier.fillMaxSize(0.92f),
+                        modifier = Modifier.fillMaxSize(0.9f),
                         contentScale = ContentScale.Fit
                     )
                 }
             }
+            Spacer(modifier = Modifier.size(8.dp))
             Text(
                 text = category.title,
                 style = MaterialTheme.typography.titleMedium,
@@ -321,18 +362,24 @@ fun CategoryScreen(
             .background(MintBackground)
     ) {
         ScreenHeader(
+            eyebrow = "Category",
             title = category.title,
-            subtitle = "Choose a picture to colour",
             onBackClick = onBackClick
         )
+        Text(
+            text = "Choose a picture to colour",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MintTextMuted,
+            modifier = Modifier.padding(start = 86.dp, end = 24.dp, bottom = 8.dp)
+        )
         LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
+            columns = GridCells.Fixed(3),
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 24.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            contentPadding = PaddingValues(top = 4.dp, bottom = 14.dp)
         ) {
             items(images) { image ->
                 ImageTile(
@@ -347,44 +394,63 @@ fun CategoryScreen(
 
 @Composable
 private fun ScreenHeader(
+    eyebrow: String? = null,
     title: String,
-    subtitle: String,
-    onBackClick: () -> Unit
+    onBackClick: () -> Unit,
+    centerContent: @Composable (() -> Unit)? = null,
+    actions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {}
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 24.dp, end = 24.dp, top = 28.dp, bottom = 16.dp),
+            .padding(start = 24.dp, end = 24.dp, top = 14.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(20.dp)
     ) {
         Surface(
             modifier = Modifier
                 .size(HeaderBackSize)
                 .clickable(onClick = onBackClick),
-            color = Color(0xFFCFE5FF),
-            shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+            color = MintCard,
+            shape = androidx.compose.foundation.shape.CircleShape,
+            border = androidx.compose.foundation.BorderStroke(1.5.dp, MintLineStrong)
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Back",
                     tint = MintText,
-                    modifier = Modifier.size(26.dp)
+                    modifier = Modifier.size(HeaderBackIconSize)
                 )
             }
         }
-        Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.headlineMedium,
-                color = MintText
-            )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MintTextMuted
-            )
+        if (centerContent == null) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                if (eyebrow != null) {
+                    Text(
+                        text = eyebrow.uppercase(),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MintTextMuted
+                    )
+                }
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MintText
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), content = actions)
+        } else {
+            Box(
+                modifier = Modifier.weight(1f),
+                contentAlignment = Alignment.Center
+            ) {
+                centerContent()
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), content = actions)
         }
     }
 }
@@ -399,35 +465,24 @@ private fun ImageTile(
     Surface(
         modifier = modifier
             .fillMaxWidth()
+            .aspectRatio(1.22f)
             .clickable(onClick = onClick),
         color = MintCard,
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(CardRadius),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+        border = androidx.compose.foundation.BorderStroke(2.5.dp, image.borderColor),
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(8.dp),
+            contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(1f)
-                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(28.dp))
-                    .background(Color.White)
-                    .border(
-                        width = 4.dp,
-                        color = image.borderColor,
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp)
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                AppImage(
-                    imageSource = image.imageSource,
-                    contentDescription = image.name,
-                    modifier = Modifier.fillMaxSize(0.88f),
-                    contentScale = ContentScale.Fit
-                )
-            }
+            AppImage(
+                imageSource = image.imageSource,
+                contentDescription = image.name,
+                modifier = Modifier.fillMaxSize(0.8f),
+                contentScale = ContentScale.Fit
+            )
         }
     }
 }
@@ -451,6 +506,8 @@ private fun DrawingScreen(
     var selectedTool by remember(image.id) { mutableStateOf(ColoringTool.Brush) }
     var bitmapVersion by remember(image.id) { mutableStateOf(0) }
     var imageContainerSize by remember(image.id) { mutableStateOf(IntSize.Zero) }
+    var isColorPickerOpen by remember(image.id) { mutableStateOf(false) }
+    var pendingSelectedColor by remember(image.id) { mutableStateOf(selectedColor) }
     val revealStrokes = remember(image.id) { mutableStateListOf<RevealStroke>() }
     var revealedCells by remember(image.id) { mutableStateOf(setOf<Int>()) }
     var activeRegionMask by remember(image.id) { mutableStateOf<BooleanArray?>(null) }
@@ -459,376 +516,441 @@ private fun DrawingScreen(
     var hasShownUnlockMessage by remember(image.id) { mutableStateOf(false) }
     var confettiBurstId by remember(image.id) { mutableStateOf(0) }
 
+    val usesMagicMist = category.id == "surprise"
     val revealBrushRadiusPx = with(density) { RevealBrushRadius.toPx() }
     val revealProgress = revealedCells.size.toFloat() / (RevealGridColumns * RevealGridRows).toFloat()
-    val isRevealComplete = revealProgress >= RevealCompletionRatio
-    val sidebarWidth by animateDpAsState(
-        targetValue = if (isRevealComplete) 136.dp else 80.dp,
-        animationSpec = tween(durationMillis = 220),
-        label = "sidebarWidth"
-    )
+    val isRevealComplete = !usesMagicMist || revealProgress >= RevealCompletionRatio
     val imageBitmap = remember(bitmapVersion, colouringBitmap) { colouringBitmap.asImageBitmap() }
 
-    LaunchedEffect(isRevealComplete) {
-        if (isRevealComplete) {
+    LaunchedEffect(usesMagicMist, isRevealComplete) {
+        if (usesMagicMist && isRevealComplete) {
             hasShownUnlockMessage = true
             confettiBurstId++
         }
     }
 
-    Row(
+    Column(
         modifier = modifier
             .fillMaxSize()
             .background(MintBackground)
+            .padding(bottom = 14.dp)
     ) {
-        DrawingSidebar(
-            width = sidebarWidth,
-            unlocked = isRevealComplete,
-            selectedColor = selectedColor,
-            colors = pastelPalette,
-            selectedTool = selectedTool,
-            onBackClick = onBackClick,
-            onColorSelected = { selectedColor = it },
-            onToolSelected = { selectedTool = it }
-        )
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
-                .padding(start = 16.dp, end = 20.dp, top = 20.dp, bottom = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            if (isRevealComplete) {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        text = category.title,
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MintText
-                    )
-                    Text(
-                        text = image.name,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MintTextMuted
-                    )
-                }
-            }
-
-            if (!isRevealComplete) {
-                HintBar("Swipe to wipe away the magic mist!")
-            } else if (hasShownUnlockMessage) {
-                UnlockBar("Picture unlocked! Now choose a colour and start drawing!")
-            }
-
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-            ) {
-                if (confettiBurstId > 0) {
-                    ConfettiBurst(
-                        burstId = confettiBurstId,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = Color.Transparent,
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(CardRadius),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.White)
-                            .onSizeChanged { imageContainerSize = it }
-                            .pointerInput(
-                                selectedTool,
-                                selectedColor,
-                                imageContainerSize,
-                                isRevealComplete,
-                                colouringBitmap,
-                                outlineBitmap
-                            ) {
-                                if (!isRevealComplete) return@pointerInput
-
-                                if (selectedTool == ColoringTool.Fill || selectedTool == ColoringTool.Eraser) {
-                                    detectTapGestures { tapOffset ->
-                                        val bitmapOffset = mapTapToBitmap(
-                                            tapOffset = tapOffset,
-                                            containerSize = imageContainerSize,
-                                            bitmapWidth = colouringBitmap.width,
-                                            bitmapHeight = colouringBitmap.height
-                                        ) ?: return@detectTapGestures
-
-                                        val changed = if (selectedTool == ColoringTool.Eraser) {
-                                            restoreRegionFromSource(
-                                                targetBitmap = colouringBitmap,
-                                                sourceBitmap = outlineBitmap,
-                                                startX = bitmapOffset.x,
-                                                startY = bitmapOffset.y
-                                            )
-                                        } else {
-                                            floodFillWithinOutline(
-                                                bitmap = colouringBitmap,
-                                                startX = bitmapOffset.x,
-                                                startY = bitmapOffset.y,
-                                                replacementColor = selectedColor.toArgbInt()
-                                            )
-                                        }
-
-                                        if (changed) {
-                                            bitmapVersion++
-                                        }
-                                    }
-                                } else {
-                                    detectDragGestures(
-                                        onDragStart = { dragStart ->
-                                            val startPoint = mapTapToBitmap(
-                                                tapOffset = dragStart,
-                                                containerSize = imageContainerSize,
-                                                bitmapWidth = colouringBitmap.width,
-                                                bitmapHeight = colouringBitmap.height
-                                            ) ?: return@detectDragGestures
-
-                                            val regionMask = buildFillRegionMask(
-                                                bitmap = outlineBitmap,
-                                                startX = startPoint.x,
-                                                startY = startPoint.y
-                                            ) ?: return@detectDragGestures
-
-                                            activeRegionMask = regionMask
-                                            previousDrawPoint = startPoint
-                                            isDrawing = true
-
-                                            val changed = if (selectedTool == ColoringTool.Eraser) {
-                                                restoreBrushStrokeWithinMask(
-                                                    targetBitmap = colouringBitmap,
-                                                    sourceBitmap = outlineBitmap,
-                                                    regionMask = regionMask,
-                                                    startX = startPoint.x,
-                                                    startY = startPoint.y,
-                                                    endX = startPoint.x,
-                                                    endY = startPoint.y,
-                                                    brushRadiusPx = BRUSH_RADIUS_PX
-                                                )
-                                            } else {
-                                                applyBrushStrokeWithinMask(
-                                                    bitmap = colouringBitmap,
-                                                    regionMask = regionMask,
-                                                    startX = startPoint.x,
-                                                    startY = startPoint.y,
-                                                    endX = startPoint.x,
-                                                    endY = startPoint.y,
-                                                    replacementColor = selectedColor.toArgbInt(),
-                                                    brushRadiusPx = BRUSH_RADIUS_PX
-                                                )
-                                            }
-
-                                            if (changed) {
-                                                bitmapVersion++
-                                            }
-                                        },
-                                        onDragEnd = {
-                                            activeRegionMask = null
-                                            previousDrawPoint = null
-                                            isDrawing = false
-                                        },
-                                        onDragCancel = {
-                                            activeRegionMask = null
-                                            previousDrawPoint = null
-                                            isDrawing = false
-                                        }
-                                    ) { change, _ ->
-                                        val regionMask = activeRegionMask ?: return@detectDragGestures
-                                        val lastPoint = previousDrawPoint ?: return@detectDragGestures
-                                        val mappedPoint = mapTapToBitmap(
-                                            tapOffset = change.position,
-                                            containerSize = imageContainerSize,
-                                            bitmapWidth = colouringBitmap.width,
-                                            bitmapHeight = colouringBitmap.height
-                                        ) ?: return@detectDragGestures
-
-                                        val changed = if (selectedTool == ColoringTool.Eraser) {
-                                            restoreBrushStrokeWithinMask(
-                                                targetBitmap = colouringBitmap,
-                                                sourceBitmap = outlineBitmap,
-                                                regionMask = regionMask,
-                                                startX = lastPoint.x,
-                                                startY = lastPoint.y,
-                                                endX = mappedPoint.x,
-                                                endY = mappedPoint.y,
-                                                brushRadiusPx = BRUSH_RADIUS_PX
-                                            )
-                                        } else {
-                                            applyBrushStrokeWithinMask(
-                                                bitmap = colouringBitmap,
-                                                regionMask = regionMask,
-                                                startX = lastPoint.x,
-                                                startY = lastPoint.y,
-                                                endX = mappedPoint.x,
-                                                endY = mappedPoint.y,
-                                                replacementColor = selectedColor.toArgbInt(),
-                                                brushRadiusPx = BRUSH_RADIUS_PX
-                                            )
-                                        }
-
-                                        if (changed) {
-                                            bitmapVersion++
-                                        }
-
-                                        previousDrawPoint = mappedPoint
-                                        change.consume()
-                                    }
-                                }
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Image(
-                            bitmap = imageBitmap,
-                            contentDescription = image.name,
-                            modifier = Modifier.fillMaxSize(0.88f),
-                            contentScale = ContentScale.Fit
-                        )
-
-                        if (!isRevealComplete) {
-                            RevealOverlay(
-                                revealStrokes = revealStrokes,
-                                brushRadius = RevealBrushRadius,
-                                onRevealStroke = { start, end ->
-                                    revealStrokes.add(RevealStroke(start, end))
-                                    val revealedByBrush = revealCellsForStroke(
-                                        startPoint = start,
-                                        endPoint = end,
-                                        containerSize = imageContainerSize,
-                                        brushRadiusPx = revealBrushRadiusPx
-                                    )
-                                    if (revealedByBrush.isNotEmpty()) {
-                                        revealedCells = revealedCells + revealedByBrush
-                                    }
-                                }
-                            )
-                        }
+        if (usesMagicMist && !isRevealComplete) {
+            MistHintRow(onBackClick = onBackClick)
+        } else {
+            ColoringToolbar(
+                selectedTool = selectedTool,
+                onToolSelected = { selectedTool = it },
+                onBackClick = onBackClick,
+                onClearClick = {
+                    if (restoreBitmapFromSource(colouringBitmap, outlineBitmap)) {
+                        bitmapVersion++
                     }
-                }
+                },
+                modifier = Modifier.padding(top = 14.dp, bottom = 10.dp)
+            )
+        }
+
+        if (usesMagicMist && isRevealComplete && hasShownUnlockMessage) {
+            UnlockToast("Picture unlocked! Now choose a colour and start drawing!")
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 24.dp)
+        ) {
+            if (usesMagicMist && confettiBurstId > 0) {
+                ConfettiBurst(
+                    burstId = confettiBurstId,
+                    modifier = Modifier.fillMaxSize()
+                )
             }
 
-            if (!isRevealComplete) {
-                RevealProgressBar(progress = revealProgress)
+            if (usesMagicMist && !isRevealComplete) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    DrawingCanvasCard(
+                        modifier = Modifier.weight(1f),
+                        imageBitmap = imageBitmap,
+                        imageName = image.name,
+                        isRevealComplete = false,
+                        imageContainerSize = imageContainerSize,
+                        onSizeChanged = { imageContainerSize = it },
+                        selectedColor = selectedColor,
+                        revealStrokes = revealStrokes,
+                        onRevealStroke = { start, end ->
+                            revealStrokes.add(RevealStroke(start, end))
+                            val revealedByBrush = revealCellsForStroke(
+                                startPoint = start,
+                                endPoint = end,
+                                containerSize = imageContainerSize,
+                                brushRadiusPx = revealBrushRadiusPx
+                            )
+                            if (revealedByBrush.isNotEmpty()) {
+                                revealedCells = revealedCells + revealedByBrush
+                            }
+                        }
+                    )
+                    RevealProgressBar(
+                        progress = revealProgress,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    DrawingPaletteSidebar(
+                        selectedColor = selectedColor,
+                        colors = pastelPalette.take(5),
+                        onColorSelected = { selectedColor = it },
+                        onMoreColorsClick = {
+                            pendingSelectedColor = selectedColor
+                            isColorPickerOpen = true
+                        }
+                    )
+                    DrawingCanvasCard(
+                        modifier = Modifier.weight(1f),
+                        imageBitmap = imageBitmap,
+                        imageName = image.name,
+                        isRevealComplete = true,
+                        imageContainerSize = imageContainerSize,
+                        onSizeChanged = { imageContainerSize = it },
+                        selectedTool = selectedTool,
+                        selectedColor = selectedColor,
+                        colouringBitmap = colouringBitmap,
+                        outlineBitmap = outlineBitmap,
+                        activeRegionMask = activeRegionMask,
+                        previousDrawPoint = previousDrawPoint,
+                        onActiveRegionMaskChange = { activeRegionMask = it },
+                        onPreviousDrawPointChange = { previousDrawPoint = it },
+                        onDrawingChange = { isDrawing = it },
+                        onBitmapChanged = { bitmapVersion++ }
+                    )
+                }
+
+                if (isColorPickerOpen) {
+                    ExpandedColorPicker(
+                        selectedColor = pendingSelectedColor,
+                        colors = pastelPalette,
+                        onColorSelected = { pendingSelectedColor = it },
+                        onApply = {
+                            selectedColor = pendingSelectedColor
+                            isColorPickerOpen = false
+                        },
+                        onDismiss = {
+                            pendingSelectedColor = selectedColor
+                            isColorPickerOpen = false
+                        }
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun DrawingSidebar(
-    width: Dp,
-    unlocked: Boolean,
+private fun MistHintRow(
+    onBackClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 24.dp, end = 24.dp, top = 14.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Surface(
+            modifier = Modifier
+                .size(HeaderBackSize)
+                .clickable(onClick = onBackClick),
+            color = MintCard,
+            shape = androidx.compose.foundation.shape.CircleShape,
+            border = BorderStroke(1.5.dp, MintLineStrong)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    tint = MintText,
+                    modifier = Modifier.size(HeaderBackIconSize)
+                )
+            }
+        }
+        Text(text = "\u2728", style = MaterialTheme.typography.titleMedium, color = MintTextSecondary)
+        Text(
+            text = "Swipe to wipe away the magic mist!",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MintTextSecondary
+        )
+    }
+}
+
+@Composable
+private fun DrawingCanvasCard(
+    modifier: Modifier = Modifier,
+    imageBitmap: androidx.compose.ui.graphics.ImageBitmap,
+    imageName: String,
+    isRevealComplete: Boolean,
+    imageContainerSize: IntSize,
+    onSizeChanged: (IntSize) -> Unit,
     selectedColor: Color,
-    colors: List<Color>,
-    selectedTool: ColoringTool,
-    onBackClick: () -> Unit,
-    onColorSelected: (Color) -> Unit,
-    onToolSelected: (ColoringTool) -> Unit
+    revealStrokes: List<RevealStroke> = emptyList(),
+    onRevealStroke: ((androidx.compose.ui.geometry.Offset, androidx.compose.ui.geometry.Offset) -> Unit)? = null,
+    selectedTool: ColoringTool = ColoringTool.Brush,
+    colouringBitmap: android.graphics.Bitmap? = null,
+    outlineBitmap: android.graphics.Bitmap? = null,
+    activeRegionMask: BooleanArray? = null,
+    previousDrawPoint: Point? = null,
+    onActiveRegionMaskChange: (BooleanArray?) -> Unit = {},
+    onPreviousDrawPointChange: (Point?) -> Unit = {},
+    onDrawingChange: (Boolean) -> Unit = {},
+    onBitmapChanged: () -> Unit = {}
 ) {
     Surface(
         modifier = Modifier
-            .width(width)
+            .then(modifier)
             .fillMaxHeight(),
-        color = Color.Transparent,
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(topEnd = CardRadius, bottomEnd = CardRadius),
+        color = MintCard,
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(CardRadius),
+        border = BorderStroke(1.5.dp, MintLine)
     ) {
-        BoxWithConstraints {
-            val swatchRows = ((colors.size + 1) / 2)
-            val spacing = 8.dp
-            val reservedHeight = 260.dp
-            val paletteHeight = (maxHeight - reservedHeight).coerceAtLeast(220.dp)
-            val swatchSize = ((paletteHeight - (spacing * (swatchRows - 1))) / swatchRows)
-                .coerceIn(20.dp, 34.dp)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.White)
+                .onSizeChanged(onSizeChanged)
+                .pointerInput(
+                    selectedTool,
+                    selectedColor,
+                    imageContainerSize,
+                    isRevealComplete,
+                    colouringBitmap,
+                    outlineBitmap
+                ) {
+                    if (!isRevealComplete || colouringBitmap == null || outlineBitmap == null) {
+                        return@pointerInput
+                    }
+
+                    var currentRegionMask: BooleanArray? = null
+                    var currentPreviousDrawPoint: Point? = null
+
+                    if (selectedTool == ColoringTool.Fill || selectedTool == ColoringTool.Eraser) {
+                        detectTapGestures { tapOffset ->
+                            val bitmapOffset = mapTapToBitmap(
+                                tapOffset = tapOffset,
+                                containerSize = imageContainerSize,
+                                bitmapWidth = colouringBitmap.width,
+                                bitmapHeight = colouringBitmap.height
+                            ) ?: return@detectTapGestures
+
+                            val changed = if (selectedTool == ColoringTool.Eraser) {
+                                restoreRegionFromSource(
+                                    targetBitmap = colouringBitmap,
+                                    sourceBitmap = outlineBitmap,
+                                    startX = bitmapOffset.x,
+                                    startY = bitmapOffset.y
+                                )
+                            } else {
+                                floodFillWithinOutline(
+                                    bitmap = colouringBitmap,
+                                    startX = bitmapOffset.x,
+                                    startY = bitmapOffset.y,
+                                    replacementColor = selectedColor.toArgbInt()
+                                )
+                            }
+
+                            if (changed) {
+                                onBitmapChanged()
+                            }
+                        }
+                    } else {
+                        detectDragGestures(
+                            onDragStart = { dragStart ->
+                                val startPoint = mapTapToBitmap(
+                                    tapOffset = dragStart,
+                                    containerSize = imageContainerSize,
+                                    bitmapWidth = colouringBitmap.width,
+                                    bitmapHeight = colouringBitmap.height
+                                ) ?: return@detectDragGestures
+
+                                val regionMask = buildFillRegionMask(
+                                    bitmap = outlineBitmap,
+                                    startX = startPoint.x,
+                                    startY = startPoint.y
+                                ) ?: return@detectDragGestures
+
+                                currentRegionMask = regionMask
+                                currentPreviousDrawPoint = startPoint
+                                onActiveRegionMaskChange(regionMask)
+                                onPreviousDrawPointChange(startPoint)
+                                onDrawingChange(true)
+
+                                val changed = if (selectedTool == ColoringTool.Eraser) {
+                                    restoreBrushStrokeWithinMask(
+                                        targetBitmap = colouringBitmap,
+                                        sourceBitmap = outlineBitmap,
+                                        regionMask = regionMask,
+                                        startX = startPoint.x,
+                                        startY = startPoint.y,
+                                        endX = startPoint.x,
+                                        endY = startPoint.y,
+                                        brushRadiusPx = BRUSH_RADIUS_PX
+                                    )
+                                } else {
+                                    applyBrushStrokeWithinMask(
+                                        bitmap = colouringBitmap,
+                                        regionMask = regionMask,
+                                        startX = startPoint.x,
+                                        startY = startPoint.y,
+                                        endX = startPoint.x,
+                                        endY = startPoint.y,
+                                        replacementColor = selectedColor.toArgbInt(),
+                                        brushRadiusPx = BRUSH_RADIUS_PX
+                                    )
+                                }
+
+                                if (changed) {
+                                    onBitmapChanged()
+                                }
+                            },
+                            onDragEnd = {
+                                currentRegionMask = null
+                                currentPreviousDrawPoint = null
+                                onActiveRegionMaskChange(null)
+                                onPreviousDrawPointChange(null)
+                                onDrawingChange(false)
+                            },
+                            onDragCancel = {
+                                currentRegionMask = null
+                                currentPreviousDrawPoint = null
+                                onActiveRegionMaskChange(null)
+                                onPreviousDrawPointChange(null)
+                                onDrawingChange(false)
+                            }
+                        ) { change, _ ->
+                            val regionMask = currentRegionMask ?: return@detectDragGestures
+                            val lastPoint = currentPreviousDrawPoint ?: return@detectDragGestures
+                            val mappedPoint = mapTapToBitmap(
+                                tapOffset = change.position,
+                                containerSize = imageContainerSize,
+                                bitmapWidth = colouringBitmap.width,
+                                bitmapHeight = colouringBitmap.height
+                            ) ?: return@detectDragGestures
+
+                            val changed = if (selectedTool == ColoringTool.Eraser) {
+                                restoreBrushStrokeWithinMask(
+                                    targetBitmap = colouringBitmap,
+                                    sourceBitmap = outlineBitmap,
+                                    regionMask = regionMask,
+                                    startX = lastPoint.x,
+                                    startY = lastPoint.y,
+                                    endX = mappedPoint.x,
+                                    endY = mappedPoint.y,
+                                    brushRadiusPx = BRUSH_RADIUS_PX
+                                )
+                            } else {
+                                applyBrushStrokeWithinMask(
+                                    bitmap = colouringBitmap,
+                                    regionMask = regionMask,
+                                    startX = lastPoint.x,
+                                    startY = lastPoint.y,
+                                    endX = mappedPoint.x,
+                                    endY = mappedPoint.y,
+                                    replacementColor = selectedColor.toArgbInt(),
+                                    brushRadiusPx = BRUSH_RADIUS_PX
+                                )
+                            }
+
+                            if (changed) {
+                                onBitmapChanged()
+                            }
+
+                            currentPreviousDrawPoint = mappedPoint
+                            onPreviousDrawPointChange(mappedPoint)
+                            change.consume()
+                        }
+                    }
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                bitmap = imageBitmap,
+                contentDescription = imageName,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(28.dp),
+                contentScale = ContentScale.Fit
+            )
+
+            if (!isRevealComplete && onRevealStroke != null) {
+                RevealOverlay(
+                    revealStrokes = revealStrokes,
+                    brushRadius = RevealBrushRadius,
+                    onRevealStroke = onRevealStroke
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DrawingPaletteSidebar(
+    selectedColor: Color,
+    colors: List<Color>,
+    onColorSelected: (Color) -> Unit,
+    onMoreColorsClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .width(92.dp)
+            .fillMaxHeight(),
+        color = MintCard,
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(26.dp),
+        border = BorderStroke(1.5.dp, MintLine)
+    ) {
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 8.dp, vertical = 12.dp)
+        ) {
+            val selectedSize = 48.dp
+            val plusSize = 56.dp
+            val spacing = 12.dp
+            val availableHeight = maxHeight - selectedSize - plusSize - 32.dp - (spacing * (colors.size - 1))
+            val swatchSize = (availableHeight / colors.size).coerceIn(44.dp, 62.dp)
 
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 12.dp, vertical = 20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .padding(top = 2.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                SidebarBackButton(
-                    unlocked = unlocked,
-                    onBackClick = onBackClick
+                Box(
+                    modifier = Modifier
+                        .size(selectedSize)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(selectedColor)
+                        .border(3.dp, Color.White, androidx.compose.foundation.shape.CircleShape)
+                        .border(2.5.dp, MintLineStrong, androidx.compose.foundation.shape.CircleShape)
                 )
-
-                if (unlocked) {
-                    Box(
-                        modifier = Modifier
-                            .size(52.dp)
-                            .clip(androidx.compose.foundation.shape.CircleShape)
-                            .background(selectedColor)
-                            .border(4.dp, Color.White, androidx.compose.foundation.shape.CircleShape)
+                Spacer(modifier = Modifier.height(16.dp))
+                colors.forEachIndexed { index, color ->
+                    PaletteSwatch(
+                        color = color,
+                        selected = selectedColor == color,
+                        size = swatchSize,
+                        onClick = { onColorSelected(color) }
                     )
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(2),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height((swatchSize * swatchRows) + (spacing * (swatchRows - 1))),
-                        horizontalArrangement = Arrangement.spacedBy(spacing),
-                        verticalArrangement = Arrangement.spacedBy(spacing),
-                        userScrollEnabled = false
-                    ) {
-                        items(colors) { color ->
-                            PaletteSwatch(
-                                color = color,
-                                selected = selectedColor == color,
-                                size = swatchSize,
-                                onClick = { onColorSelected(color) }
-                            )
-                        }
+                    if (index != colors.lastIndex) {
+                        Spacer(modifier = Modifier.height(spacing))
                     }
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(0.8f)
-                            .height(1.5.dp)
-                            .background(MintBackgroundSoft)
-                    )
-                    ToolRow(
-                        selectedTool = selectedTool,
-                        selectedColor = selectedColor,
-                        onToolSelected = onToolSelected
-                    )
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SidebarBackButton(
-    unlocked: Boolean,
-    onBackClick: () -> Unit
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(64.dp)
-            .clickable(onClick = onBackClick),
-        color = Color.Transparent,
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxSize(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "Back",
-                tint = MintText,
-                modifier = Modifier.size(if (unlocked) 22.dp else 26.dp)
-            )
-            if (unlocked) {
-                Spacer(modifier = Modifier.size(8.dp))
-                Text(
-                    text = "Back",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MintText
+                Spacer(modifier = Modifier.weight(1f))
+                PlusColorButton(
+                    size = plusSize,
+                    onClick = onMoreColorsClick
                 )
             }
         }
@@ -845,59 +967,220 @@ private fun PaletteSwatch(
     Box(
         modifier = Modifier
             .size(size)
-            .clip(androidx.compose.foundation.shape.CircleShape)
-            .background(color)
             .border(
-                width = if (selected) 3.dp else 0.dp,
-                color = Color.White,
+                width = if (selected) 2.5.dp else 0.dp,
+                color = MintLineStrong,
                 shape = androidx.compose.foundation.shape.CircleShape
             )
+            .padding(if (selected) 4.dp else 0.dp)
+            .size(size - if (selected) 8.dp else 0.dp)
+            .clip(androidx.compose.foundation.shape.CircleShape)
             .clickable(onClick = onClick)
-    )
+    ) {
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .padding(top = 5.dp)
+                .clip(androidx.compose.foundation.shape.CircleShape)
+                .background(color.copy(alpha = 0.22f))
+        )
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .clip(androidx.compose.foundation.shape.CircleShape)
+                .background(color)
+                .border(
+                    width = if (selected) 2.5.dp else if (color == Color.White) 1.5.dp else 0.dp,
+                    color = if (selected) Color.White else MintLineStrong,
+                    shape = androidx.compose.foundation.shape.CircleShape
+                )
+        )
+    }
 }
 
 @Composable
-private fun ToolRow(
-    selectedTool: ColoringTool,
-    selectedColor: Color,
-    onToolSelected: (ColoringTool) -> Unit
+private fun PlusColorButton(
+    size: Dp,
+    onClick: () -> Unit
 ) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+    Surface(
+        modifier = Modifier
+            .size(size)
+            .clickable(onClick = onClick),
+        color = MintBackgroundSoft,
+        shape = androidx.compose.foundation.shape.CircleShape,
+        border = BorderStroke(1.5.dp, MintLine)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            ToolButton(
-                label = "Brush",
-                icon = Icons.Filled.Brush,
-                selected = selectedTool == ColoringTool.Brush,
-                selectedColor = selectedColor,
-                modifier = Modifier.weight(1f),
-                onClick = { onToolSelected(ColoringTool.Brush) }
-            )
-            ToolButton(
-                label = "Fill",
-                icon = Icons.Filled.FormatColorFill,
-                selected = selectedTool == ColoringTool.Fill,
-                selectedColor = selectedColor,
-                modifier = Modifier.weight(1f),
-                onClick = { onToolSelected(ColoringTool.Fill) }
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = Icons.Filled.Add,
+                contentDescription = "More colors",
+                tint = MintTextSecondary,
+                modifier = Modifier.size(size * 0.48f)
             )
         }
-        Row(modifier = Modifier.fillMaxWidth()) {
-            ToolButton(
-                label = "Erase",
-                icon = null,
-                selected = selectedTool == ColoringTool.Eraser,
-                selectedColor = selectedColor,
-                modifier = Modifier.weight(1f),
-                onClick = { onToolSelected(ColoringTool.Eraser) }
+    }
+}
+
+@Composable
+private fun ExpandedColorPicker(
+    selectedColor: Color,
+    colors: List<Color>,
+    onColorSelected: (Color) -> Unit,
+    onApply: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0x4DFFFFFF))
+            .clickable(onClick = onDismiss),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            modifier = Modifier
+                .width(520.dp)
+                .clickable(enabled = false, onClick = {}),
+            color = MintCard,
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(32.dp),
+            border = BorderStroke(1.5.dp, MintLine)
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 28.dp, vertical = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(84.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(selectedColor)
+                        .border(4.dp, Color.White, androidx.compose.foundation.shape.CircleShape)
+                        .border(2.5.dp, MintLineStrong, androidx.compose.foundation.shape.CircleShape)
+                )
+                Spacer(modifier = Modifier.height(22.dp))
+                repeat(4) { rowIndex ->
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(18.dp),
+                        modifier = Modifier.padding(bottom = if (rowIndex == 3) 0.dp else 18.dp)
+                    ) {
+                        repeat(5) { columnIndex ->
+                            val colorIndex = rowIndex * 5 + columnIndex
+                            val color = colors[colorIndex]
+                            PaletteSwatch(
+                                color = color,
+                                selected = selectedColor == color,
+                                size = 64.dp,
+                                onClick = { onColorSelected(color) }
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(26.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(24.dp)
+                ) {
+                    PickerActionButton(
+                        icon = Icons.Filled.Check,
+                        containerColor = Color(0xFFE3F7E9),
+                        iconTint = Color(0xFF2D7A44),
+                        onClick = onApply
+                    )
+                    PickerActionButton(
+                        icon = Icons.Filled.Close,
+                        containerColor = Color(0xFFFFECEC),
+                        iconTint = Color(0xFFD94A4A),
+                        onClick = onDismiss
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PickerActionButton(
+    icon: ImageVector,
+    containerColor: Color,
+    iconTint: Color,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .size(ToolbarButtonSize)
+            .clickable(onClick = onClick),
+        color = containerColor,
+        shape = androidx.compose.foundation.shape.CircleShape,
+        border = BorderStroke(1.5.dp, MintLine)
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = iconTint,
+                modifier = Modifier.size(ToolbarButtonIconSize)
             )
-            Spacer(modifier = Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun ColoringToolbar(
+    selectedTool: ColoringTool,
+    onToolSelected: (ColoringTool) -> Unit,
+    onBackClick: () -> Unit,
+    onClearClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        ToolbarCircleButton(
+            icon = Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = "Back",
+            onClick = onBackClick
+        )
+
+        ToolToggleGroup(
+            selectedTool = selectedTool,
+            onToolSelected = onToolSelected
+        )
+
+        HeaderIconButton(
+            icon = Icons.Filled.CleaningServices,
+            contentDescription = "Clear drawing",
+            onClick = onClearClick,
+            size = HeaderBackSize
+        )
+    }
+}
+
+@Composable
+private fun ToolToggleGroup(
+    selectedTool: ColoringTool,
+    onToolSelected: (ColoringTool) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(999.dp))
+            .background(MintBackgroundSoft)
+            .border(BorderStroke(1.5.dp, MintLine), androidx.compose.foundation.shape.RoundedCornerShape(999.dp))
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(18.dp)
+    ) {
+        listOf(
+            ColoringTool.Brush to Icons.Filled.Brush,
+            ColoringTool.Fill to Icons.Filled.FormatColorFill
+        ).forEach { (tool, icon) ->
+            ToolButton(
+                label = tool.name,
+                icon = icon,
+                selected = selectedTool == tool,
+                onClick = { onToolSelected(tool) }
+            )
         }
     }
 }
@@ -907,78 +1190,85 @@ private fun ToolButton(
     label: String,
     icon: ImageVector?,
     selected: Boolean,
-    selectedColor: Color,
-    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+    Surface(
+        modifier = Modifier
+            .size(ToolbarButtonSize)
+            .clickable(onClick = onClick),
+        color = if (selected) Color.White else Color.Transparent,
+        shape = androidx.compose.foundation.shape.CircleShape
     ) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
-                .clickable(onClick = onClick),
-            color = if (selected) selectedColor else MintBackground,
-            shape = androidx.compose.foundation.shape.CircleShape,
-        ) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                if (icon != null) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = label,
-                        tint = if (selected) Color.White else MintTextMuted,
-                        modifier = Modifier.size(24.dp)
-                    )
-                } else {
-                    Text(
-                        text = "⌫",
-                        color = if (selected) Color.White else MintTextMuted,
-                        style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.scale(1.05f)
-                    )
-                }
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = label,
+                    tint = if (selected) MintText else MintTextMuted,
+                    modifier = Modifier.size(ToolbarButtonIconSize)
+                )
+            } else {
+                Text(
+                    text = "⌫",
+                    color = if (selected) MintText else MintTextMuted,
+                    style = MaterialTheme.typography.headlineMedium,
+                    modifier = Modifier.scale(1.05f)
+                )
             }
         }
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MintTextMuted
-        )
     }
 }
 
 @Composable
-private fun HintBar(text: String) {
+private fun HeaderIconButton(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    size: Dp = HeaderBackSize
+) {
+    ToolbarCircleButton(
+        icon = icon,
+        contentDescription = contentDescription,
+        onClick = onClick,
+        size = size
+    )
+}
+
+@Composable
+private fun ToolbarCircleButton(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    size: Dp = HeaderBackSize
+) {
     Surface(
-        color = Color.Transparent,
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+        modifier = Modifier
+            .size(size)
+            .clickable(onClick = onClick),
+        color = MintCard,
+        shape = androidx.compose.foundation.shape.CircleShape,
+        border = BorderStroke(1.5.dp, MintLineStrong)
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(text = "\u2728", color = MintTextMuted)
-            Text(
-                text = text,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MintTextMuted
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = MintTextSecondary,
+                modifier = Modifier.size(if (size >= HeaderBackSize) HeaderBackIconSize else 18.dp)
             )
         }
     }
 }
 
 @Composable
-private fun UnlockBar(text: String) {
+private fun UnlockToast(text: String) {
     Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 24.dp, end = 24.dp, bottom = 10.dp),
         color = Color(0xFFE3F7E9),
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp)
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, MintProgressStart)
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
@@ -996,34 +1286,44 @@ private fun UnlockBar(text: String) {
 }
 
 @Composable
-private fun RevealProgressBar(progress: Float) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+private fun RevealProgressBar(
+    progress: Float,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(6.dp)
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(999.dp))
+            .background(MintLine)
     ) {
         Box(
             modifier = Modifier
-                .weight(1f)
-                .height(10.dp)
-                .clip(androidx.compose.foundation.shape.RoundedCornerShape(999.dp))
-                .background(MintBackgroundSoft)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(progress.coerceIn(0f, 1f))
-                    .fillMaxHeight()
-                    .background(
-                        Brush.horizontalGradient(
-                            colors = listOf(MintProgressStart, MintProgressEnd)
-                        )
+                .fillMaxWidth(progress.coerceIn(0f, 1f))
+                .fillMaxHeight()
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(MintProgressStart, MintProgressEnd)
                     )
-            )
-        }
+                )
+        )
+    }
+}
+
+@Composable
+private fun HintBar(text: String) {
+    Row(
+        modifier = Modifier
+            .defaultMinSize(minHeight = 0.dp)
+            .widthIn(min = 0.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(text = "\u2728", color = MintTextSecondary)
         Text(
-            text = "${(progress * 100).toInt()}%",
-            style = MaterialTheme.typography.labelLarge,
-            color = MintTextMuted
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MintTextSecondary
         )
     }
 }

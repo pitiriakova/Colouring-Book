@@ -257,6 +257,26 @@ fun restoreBrushStrokeWithinMask(
     return changed
 }
 
+fun restoreBitmapFromSource(
+    targetBitmap: Bitmap,
+    sourceBitmap: Bitmap
+): Boolean {
+    val width = minOf(targetBitmap.width, sourceBitmap.width)
+    val height = minOf(targetBitmap.height, sourceBitmap.height)
+    var changed = false
+
+    for (y in 0 until height) {
+        for (x in 0 until width) {
+            val sourceColor = sourceBitmap.getPixel(x, y)
+            if (targetBitmap.getPixel(x, y) == sourceColor) continue
+            targetBitmap.setPixel(x, y, sourceColor)
+            changed = true
+        }
+    }
+
+    return changed
+}
+
 private fun enqueueAdjacentRuns(
     pixels: IntArray,
     width: Int,

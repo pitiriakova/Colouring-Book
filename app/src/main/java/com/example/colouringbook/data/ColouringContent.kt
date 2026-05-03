@@ -38,6 +38,14 @@ private val nicoleImageNames = mapOf(
 
 val homeCategories = listOf(
     Category(
+        id = "surprise",
+        title = "Magic",
+        imageSource = ImageSource(assetPath = "tiles/tile_surprise.png"),
+        tileImageSource = ImageSource(assetPath = "tiles/tile_surprise.png"),
+        accentColor = Color(0xFFFFE7F4),
+        borderColor = Color(0xFFF6A9CF)
+    ),
+    Category(
         id = "animals",
         title = "Animals",
         imageSource = ImageSource(assetPath = "sections/animals/animal_1.png"),
@@ -70,6 +78,14 @@ val homeCategories = listOf(
         borderColor = Color(0xFFC5A6F5)
     ),
     Category(
+        id = "farm",
+        title = "Farm",
+        imageSource = ImageSource(assetPath = "sections/farm/farm_1.png"),
+        tileImageSource = ImageSource(assetPath = "tiles/tile_farm.png"),
+        accentColor = Color(0xFFE6F5D8),
+        borderColor = Color(0xFF9AD17B)
+    ),
+    Category(
         id = "nicole",
         title = "Nicole",
         imageSource = ImageSource(assetPath = "sections/nicole/nicole_1.png"),
@@ -89,23 +105,25 @@ val homeCategories = listOf(
 
 val pastelPalette = listOf(
     Color(0xFFF8C8C8),
-    Color(0xFFF7D9AE),
-    Color(0xFFF9EDAF),
-    Color(0xFFD8EDC7),
-    Color(0xFFC9E8D7),
-    Color(0xFFC8E5F6),
-    Color(0xFFD7D5F8),
-    Color(0xFFE9D4F5),
-    Color(0xFFF6D3E0),
-    Color(0xFFE4D8CF),
-    Color(0xFFFF8A80),
-    Color(0xFFFFB74D),
-    Color(0xFFFFF176),
-    Color(0xFFA5D6A7),
-    Color(0xFF4DD0E1),
-    Color(0xFF64B5F6),
-    Color(0xFF9575CD),
-    Color(0xFFF06292)
+    Color(0xFFF8D8B0),
+    Color(0xFFF8F0A8),
+    Color(0xFFC8EAC0),
+    Color(0xFFB8E8DC),
+    Color(0xFFB8D8F4),
+    Color(0xFFC8C0F4),
+    Color(0xFFE8C0F0),
+    Color(0xFFF08080),
+    Color(0xFFF4B060),
+    Color(0xFFF0D840),
+    Color(0xFF70C870),
+    Color(0xFF48C8D8),
+    Color(0xFF60A0E8),
+    Color(0xFF9070D0),
+    Color(0xFFE860A0),
+    Color(0xFF3D2B1F),
+    Color(0xFF1A1A2E),
+    Color(0xFF3A3A3A),
+    Color(0xFFFFFFFF)
 )
 
 fun categoryImages(context: Context, category: Category): List<ColouringImage> {
@@ -163,6 +181,12 @@ private fun imageBorderPalette(category: Category): List<Color> {
             Color(0xFFD4BDF8),
             Color(0xFFB48EEB),
             Color(0xFFE3D3FB)
+        )
+        "farm" -> listOf(
+            Color(0xFF9AD17B),
+            Color(0xFFB2DE98),
+            Color(0xFF88C866),
+            Color(0xFFC9E8B8)
         )
         "balls" -> listOf(
             Color(0xFFFFD966),
